@@ -16,7 +16,7 @@ import {
   getGitHubUser,
   getMainBranchSha,
 } from "../lib/github.js";
-import { registryItemSchema } from "../lib/registry.js";
+import { registryItemSchema, registrySchema } from "../lib/registry.js";
 import { validateComponent } from "../lib/validator.js";
 import { detectVersionChanges } from "../lib/versioning.js";
 
@@ -25,6 +25,10 @@ export const publish = new Command()
   .description("Publish a component to the registry")
   .option("-y, --yes", "Skip confirmation prompts")
   .option("-m, --message <message>", "Custom commit message")
+  .option(
+    "-i, --item <item>",
+    "Specific item to publish from registry collection",
+  )
   .action(async (options) => {
     const CWD = process.cwd();
     const registryJsonPath = path.join(CWD, "registry.json");
@@ -43,23 +47,108 @@ export const publish = new Command()
 
     try {
       const registryJson = await fs.readJson(registryJsonPath);
-      const validation = registryItemSchema.safeParse(registryJson);
 
-      if (!validation.success) {
-        spinner.fail(chalk.red("❌ Invalid registry.json file"));
-        console.error(chalk.red("Validation errors:"));
-        validation.error.issues.forEach((issue) => {
-          console.error(
-            chalk.red(`  - ${issue.path.join(".")}: ${issue.message}`),
-          );
-        });
-        process.exit(1);
+      // First, try to validate as a registry collection
+      const registryValidation = registrySchema.safeParse(registryJson);
+
+      let selectedItem;
+      let componentName;
+      let files;
+
+      if (registryValidation.success) {
+        // It's a registry collection - ask which item to publish
+        spinner.succeed(
+          chalk.green(
+            `✅ Found registry collection: ${chalk.cyan(registryJson.name)}`,
+          ),
+        );
+
+        const items = registryValidation.data.items;
+
+        if (items.length === 0) {
+          spinner.fail(chalk.red("❌ No items found in registry collection"));
+          process.exit(1);
+        }
+
+        // If specific item is provided via --item flag
+        if (options.item) {
+          selectedItem = items.find((item) => item.name === options.item);
+          if (!selectedItem) {
+            spinner.fail(
+              chalk.red(
+                `❌ Item '${options.item}' not found in registry collection`,
+              ),
+            );
+            console.log(chalk.yellow("Available items:"));
+            items.forEach((item) =>
+              console.log(chalk.gray(`  - ${item.name}`)),
+            );
+            process.exit(1);
+          }
+        } else {
+          // Ask user to select an item
+          const { selectedItemName } = await inquirer.prompt([
+            {
+              type: "list",
+              name: "selectedItemName",
+              message: "Which item would you like to publish?",
+              choices: items.map((item) => ({
+                name: `${item.name}${item.title ? ` - ${item.title}` : ""}${item.description ? ` (${item.description.substring(0, 50)}...)` : ""}`,
+                value: item.name,
+              })),
+            },
+          ] as any);
+
+          selectedItem = items.find((item) => item.name === selectedItemName);
+        }
+
+        // Validate the selected item
+        if (!selectedItem) {
+          spinner.fail(chalk.red("❌ No item selected"));
+          process.exit(1);
+        }
+
+        const itemValidation = registryItemSchema.safeParse(selectedItem);
+        if (!itemValidation.success) {
+          spinner.fail(chalk.red("❌ Invalid item in registry collection"));
+          console.error(chalk.red("Validation errors:"));
+          itemValidation.error.issues.forEach((issue) => {
+            console.error(
+              chalk.red(`  - ${issue.path.join(".")}: ${issue.message}`),
+            );
+          });
+          process.exit(1);
+        }
+
+        componentName = selectedItem.name;
+        files = selectedItem.files;
+
+        spinner.succeed(
+          chalk.green(`✅ Selected item: ${chalk.cyan(componentName)}`),
+        );
+      } else {
+        // Try to validate as a single registry item
+        const itemValidation = registryItemSchema.safeParse(registryJson);
+
+        if (!itemValidation.success) {
+          spinner.fail(chalk.red("❌ Invalid registry.json file"));
+          console.error(chalk.red("Validation errors:"));
+          itemValidation.error.issues.forEach((issue) => {
+            console.error(
+              chalk.red(`  - ${issue.path.join(".")}: ${issue.message}`),
+            );
+          });
+          process.exit(1);
+        }
+
+        selectedItem = registryJson;
+        componentName = selectedItem.name;
+        files = selectedItem.files;
+
+        spinner.succeed(
+          chalk.green(`✅ Validated component: ${chalk.cyan(componentName)}`),
+        );
       }
-
-      const { name: componentName, files } = validation.data;
-      spinner.succeed(
-        chalk.green(`✅ Validated component: ${chalk.cyan(componentName)}`),
-      );
 
       // Validate component files and structure
       spinner.text = "🔍 Validating component files...";
@@ -75,7 +164,7 @@ export const publish = new Command()
 
       // Detect version changes
       spinner.text = "📊 Analyzing version changes...";
-      const currentVersion = registryJson.version || "1.0.0";
+      const currentVersion = selectedItem.version || "1.0.0";
       const versionInfo = await detectVersionChanges(CWD, currentVersion);
 
       if (versionInfo.hasChanges) {
@@ -127,9 +216,9 @@ export const publish = new Command()
       spinner.text = "📤 Uploading component files...";
       const componentDir = `components/${user.login}/${componentName}/${version}`;
 
-      // Upload registry.json first
+      // Upload registry.json first (use the selected item, not the full collection)
       const updatedRegistryJson = {
-        ...registryJson,
+        ...selectedItem,
         version: version,
         publishedAt: new Date().toISOString(),
         publisher: user.login,
@@ -187,17 +276,17 @@ export const publish = new Command()
         `## Component: ${componentName} v${version}
 
 **Author:** @${user.login}
-**Description:** ${registryJson.description}
+**Description:** ${selectedItem.description}
 
 ### Files Added:
-${files ? files.map((file) => `- \`${file.path}\` (${file.type})`).join("\n") : "- No files specified"}
+${files ? files.map((file: any) => `- \`${file.path}\` (${file.type})`).join("\n") : "- No files specified"}
 
 ### Dependencies:
-${registryJson.dependencies ? `- **NPM:** ${registryJson.dependencies.join(", ")}` : "- None"}
-${registryJson.registryDependencies ? `- **Registry:** ${registryJson.registryDependencies.join(", ")}` : ""}
+${selectedItem.dependencies ? `- **NPM:** ${selectedItem.dependencies.join(", ")}` : "- None"}
+${selectedItem.registryDependencies ? `- **Registry:** ${selectedItem.registryDependencies.join(", ")}` : ""}
 
 ### Categories:
-${registryJson.categories ? registryJson.categories.map((cat: string) => `- ${cat}`).join("\n") : "- None"}
+${selectedItem.categories ? selectedItem.categories.map((cat: string) => `- ${cat}`).join("\n") : "- None"}
 
 ---
 *Published via SCM CLI*`,

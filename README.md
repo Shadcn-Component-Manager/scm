@@ -6,7 +6,7 @@ A powerful CLI tool for creating, sharing, and installing shadcn/ui components w
 
 ```bash
 # Install globally
-npm install -g shadcn-component-manager
+npm install -g @shadcn-component-manager/scm
 
 # Login with GitHub
 scm login
@@ -112,17 +112,7 @@ scm search button --limit 5
 
 ## 🔧 Setup
 
-### 1. GitHub OAuth Setup
-
-1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
-2. Click "New OAuth App"
-3. Fill in the details:
-   - **Application name**: SCM CLI
-   - **Homepage URL**: `https://github.com/your-username`
-   - **Authorization callback URL**: Leave empty (not needed)
-4. Copy the Client ID and update it in the SCM configuration
-
-### 2. Authentication
+### 1. Authentication
 
 ```bash
 scm login
@@ -218,32 +208,14 @@ components/
 3. **Publish your version**: `scm publish`
 4. **Submit PR**: Your component will be reviewed and merged
 
-## 🔒 Security
-
-- Uses PKCE OAuth flow (no client secrets)
-- All components are reviewed before merging
-- Open source registry with community oversight
-- Secure token storage in user's home directory
-
 ## 📄 License
 
 MIT License - see LICENSE file for details.
 
-## 🆘 Support
-
-- 📖 [Documentation](https://github.com/shadcn-component-manager/docs)
-- 🐛 [Report Issues](https://github.com/shadcn-component-manager/registry/issues)
-- 💬 [Community Discussions](https://github.com/shadcn-component-manager/registry/discussions)
-
 ## 🔮 Roadmap
 
 - [ ] Private registries
-- [ ] Component marketplace
+- [ ] npm style marketplace
 - [ ] Interactive previews
 - [ ] Analytics and usage tracking
 - [ ] Multi-framework support
-- [ ] Automated testing integration
-
----
-
-**Built with ❤️ for the shadcn/ui community**
