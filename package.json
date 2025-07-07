@@ -1,0 +1,85 @@
+{
+  "name": "@shadcn-component-manager/scm",
+  "description": "Shadcn Component Manager (SCM) is a open-source CLI tool and registry ecosystem designed to extend shadcn's component model, enabling developers to create, share, and install UI components with ease.",
+  "version": "0.0.1",
+  "author": "BankkRoll <https://github.com/BankkRoll>",
+  "license": "MIT",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "dist/cli.js",
+  "bin": {
+    "scm": "dist/cli.js"
+  },
+  "homepage": "https://github.com/Shadcn-Component-Manager/scm#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Shadcn-Component-Manager/scm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Shadcn-Component-Manager/scm/issues"
+  },
+  "scripts": {
+    "build": "node scripts/build.js build",
+    "build:watch": "tsc --watch",
+    "build:binary": "node scripts/build.js binary",
+    "dev": "node scripts/build.js dev",
+    "start": "node dist/cli.js",
+    "format": "prettier --write .",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "shadcn",
+    "components",
+    "cli",
+    "registry",
+    "ui",
+    "react",
+    "typescript",
+    "tailwind"
+  ],
+  "packageManager": "pnpm@10.12.4",
+  "dependencies": {
+    "axios": "^1.10.0",
+    "chalk": "^5.4.1",
+    "commander": "^14.0.0",
+    "crypto-js": "^4.2.0",
+    "fs-extra": "^11.3.0",
+    "inquirer": "^12.7.0",
+    "inquirer-autocomplete-prompt": "^3.0.1",
+    "inquirer-fuzzy-path": "^2.3.0",
+    "json-schema": "^0.4.0",
+    "octokit": "^5.0.3",
+    "open": "^10.1.2",
+    "ora": "^8.2.0",
+    "semver": "^7.7.2",
+    "zod": "^3.25.75"
+  },
+  "devDependencies": {
+    "@types/crypto-js": "^4.2.2",
+    "@types/fs-extra": "^11.0.4",
+    "@types/inquirer": "^9.0.8",
+    "@types/inquirer-autocomplete-prompt": "^3.0.3",
+    "@types/inquirer-fuzzy-path": "^2.3.9",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.0.10",
+    "@types/semver": "^7.7.0",
+    "esbuild": "^0.25.6",
+    "eslint": "^9.30.1",
+    "jest": "^30.0.4",
+    "pkg": "^5.8.1",
+    "prettier": "^3.6.2",
+    "rimraf": "^6.0.1",
+    "ts-jest": "^29.4.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
