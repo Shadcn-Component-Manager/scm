@@ -152,7 +152,7 @@ export const publish = new Command()
 
       // Validate component files and structure
       spinner.text = "🔍 Validating component files...";
-      const validationResult = await validateComponent(CWD);
+      const validationResult = await validateComponent(CWD, selectedItem);
       if (!validationResult.isValid) {
         spinner.fail(chalk.red("❌ Component validation failed"));
         validationResult.errors.forEach((error) =>
