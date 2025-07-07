@@ -14,7 +14,7 @@ export const SHADCN_REGISTRY_INDEX_URL =
   "https://raw.githubusercontent.com/shadcn-ui/ui/main/apps/v4/registry.json";
 
 // GitHub OAuth configuration
-export const GITHUB_CLIENT_ID = "Ov23li9OR09dIJX24EEA";
+export const GITHUB_CLIENT_ID = "Ov23li0QT1pkOUZbSQiY";
 export const GITHUB_SCOPES = ["repo", "read:user", "user:email"];
 
 // Cache configuration
