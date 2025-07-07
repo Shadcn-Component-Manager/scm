@@ -138,6 +138,16 @@ my-component/
 └── README.md        # Documentation (optional)
 ```
 
+### SCM Internal Files
+
+SCM automatically manages internal files in the package manager directory (`~/.scm/`):
+
+- **`~/.scm/version-hashes.json`**: Tracks file changes for automatic versioning
+- **`~/.scm/config.json`**: Stores authentication and configuration data
+- **`~/.scm/cache/`**: Caches registry metadata for faster operations
+
+These files are automatically created and managed by SCM. They should not be manually edited and are completely separate from your project files.
+
 ### registry.json Example
 
 ```json

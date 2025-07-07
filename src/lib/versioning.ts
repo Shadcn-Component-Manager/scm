@@ -2,6 +2,7 @@ import chalk from "chalk";
 import crypto from "crypto";
 import fs from "fs-extra";
 import ora from "ora";
+import os from "os";
 import path from "path";
 import semver from "semver";
 
@@ -34,11 +35,18 @@ export async function detectVersionChanges(
       fileHashes[path.relative(componentPath, file)] = hash;
     }
 
-    const hashFile = path.join(componentPath, ".version-hashes.json");
+    const scmDir = path.join(os.homedir(), ".scm");
+    const hashFile = path.join(scmDir, "version-hashes.json");
     let previousHashes: Record<string, string> = {};
 
     if (await fs.pathExists(hashFile)) {
-      previousHashes = await fs.readJson(hashFile);
+      try {
+        const allHashes = await fs.readJson(hashFile);
+        const componentKey = path.basename(componentPath);
+        previousHashes = allHashes[componentKey] || {};
+      } catch (error) {
+        await fs.remove(hashFile);
+      }
     }
 
     const changedFiles: string[] = [];
@@ -87,7 +95,13 @@ export async function detectVersionChanges(
       );
     }
 
-    await fs.writeJson(hashFile, fileHashes, { spaces: 2 });
+    await fs.ensureDir(scmDir);
+    const componentKey = path.basename(componentPath);
+    const allHashes = (await fs.pathExists(hashFile))
+      ? await fs.readJson(hashFile)
+      : {};
+    allHashes[componentKey] = fileHashes;
+    await fs.writeJson(hashFile, allHashes, { spaces: 2 });
 
     spinner.succeed(
       chalk.green(
@@ -121,7 +135,7 @@ async function getAllFiles(dir: string): Promise<string[]> {
     const stat = await fs.stat(fullPath);
 
     if (stat.isDirectory()) {
-      if (item !== "node_modules" && item !== ".git") {
+      if (item !== "node_modules" && item !== ".git" && !item.startsWith(".")) {
         files.push(...(await getAllFiles(fullPath)));
       }
     } else {
@@ -196,7 +210,7 @@ export function compareVersions(v1: string, v2: string): number {
 }
 
 /**
- * Checks if version v1 is greater than version v2
+ * Checks if version v1 is greater than v2
  * @param v1 - First version string
  * @param v2 - Second version string
  * @returns True if v1 > v2, false otherwise
