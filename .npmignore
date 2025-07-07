@@ -12,6 +12,7 @@ jest.config.*
 __tests__/
 test/
 tests/
+scripts/
 
 # Development scripts and configs
 .github/

@@ -18,6 +18,9 @@ const registryIndexItemSchema = z.object({
 
 const registryIndexSchema = z.array(registryIndexItemSchema);
 
+/**
+ * Command to search for components in the registry
+ */
 export const search = new Command()
   .name("search")
   .description("Search for components in the registry")
@@ -31,7 +34,6 @@ export const search = new Command()
     try {
       let registryIndex: any[];
 
-      // Try cache first (unless force refresh)
       if (!options.force) {
         const cached = await getCachedRegistryIndex();
         if (cached) {
@@ -74,7 +76,6 @@ export const search = new Command()
           item.description.toLowerCase().includes(keyword.toLowerCase()),
       );
 
-      // Apply category filter
       if (options.category) {
         searchResults = searchResults.filter(
           (item) =>
@@ -85,7 +86,6 @@ export const search = new Command()
         );
       }
 
-      // Apply limit
       const limit = parseInt(options.limit);
       searchResults = searchResults.slice(0, limit);
 

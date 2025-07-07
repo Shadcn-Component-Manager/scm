@@ -5,6 +5,9 @@ import ora from "ora";
 import path from "path";
 import { isReservedComponentName } from "../lib/constants.js";
 
+/**
+ * Command to create a new component
+ */
 export const create = new Command()
   .name("create")
   .description("Create a new component")
@@ -13,7 +16,6 @@ export const create = new Command()
     const CWD = process.cwd();
     const componentDir = path.join(CWD, "components", componentName);
 
-    // Validate component name against reserved names
     if (isReservedComponentName(componentName)) {
       console.error(
         chalk.red(`❌ Component name "${componentName}" is reserved`),
@@ -36,7 +38,6 @@ export const create = new Command()
       process.exit(1);
     }
 
-    // Create registry item in shadcn/ui format
     const registryItem = {
       name: componentName,
       type: "registry:ui",
@@ -48,16 +49,13 @@ export const create = new Command()
       ],
     };
 
-    // Create component files
     const spinner = ora(`📝 Creating ${chalk.cyan(componentName)}...`).start();
     try {
       await fs.ensureDir(componentDir);
 
-      // Write registry.json
       const registryPath = path.join(componentDir, "registry.json");
       await fs.writeJson(registryPath, registryItem, { spaces: 2 });
 
-      // Create default component file
       const componentPath = path.join(componentDir, `${componentName}.tsx`);
       const componentContent = generateDefaultComponent(componentName);
       await fs.writeFile(componentPath, componentContent);
@@ -83,6 +81,11 @@ export const create = new Command()
     }
   });
 
+/**
+ * Generates the default component content
+ * @param componentName - Name of the component
+ * @returns Component TypeScript content
+ */
 function generateDefaultComponent(componentName: string): string {
   const componentNamePascal = componentName
     .split("-")

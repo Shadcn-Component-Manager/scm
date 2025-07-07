@@ -1,6 +1,8 @@
 import { z } from "zod";
 
-// Schema for a single file in the registry
+/**
+ * Schema for a single file in the registry
+ */
 export const registryItemFileSchema = z
   .object({
     path: z
@@ -27,7 +29,6 @@ export const registryItemFileSchema = z
   })
   .refine(
     (data) => {
-      // Target is required for registry:file and registry:page types
       if (data.type === "registry:file" || data.type === "registry:page") {
         return data.target !== undefined;
       }
@@ -38,7 +39,9 @@ export const registryItemFileSchema = z
     },
   );
 
-// Schema for CSS variables
+/**
+ * Schema for CSS variables
+ */
 export const cssVarsSchema = z.object({
   theme: z
     .record(z.string())
@@ -54,7 +57,9 @@ export const cssVarsSchema = z.object({
     .describe("CSS variables for the dark theme"),
 });
 
-// Schema for Tailwind configuration (deprecated, use cssVars.theme for Tailwind v4)
+/**
+ * Schema for Tailwind configuration (deprecated, use cssVars.theme for Tailwind v4)
+ */
 export const tailwindConfigSchema = z.object({
   config: z
     .object({
@@ -65,7 +70,9 @@ export const tailwindConfigSchema = z.object({
     .optional(),
 });
 
-// Schema for CSS definitions
+/**
+ * Schema for CSS definitions
+ */
 export const cssSchema = z
   .record(
     z.union([
@@ -75,8 +82,10 @@ export const cssSchema = z
   )
   .describe("CSS definitions to be added to the project's CSS file");
 
-// Schema for a single item in the registry (a component)
-// Based on https://ui.shadcn.com/schema/registry-item.json
+/**
+ * Schema for a single item in the registry (a component)
+ * Based on https://ui.shadcn.com/schema/registry-item.json
+ */
 export const registryItemSchema = z.object({
   name: z
     .string()
@@ -153,8 +162,10 @@ export const registryItemSchema = z.object({
     ),
 });
 
-// Schema for the main registry file
-// Based on https://ui.shadcn.com/schema/registry.json
+/**
+ * Schema for the main registry file
+ * Based on https://ui.shadcn.com/schema/registry.json
+ */
 export const registrySchema = z.object({
   name: z.string().describe("The name of your registry"),
   homepage: z.string().describe("The homepage of your registry"),

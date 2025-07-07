@@ -14,9 +14,11 @@ import { update } from "./commands/update.js";
 const { version, description } = pkg;
 const program = new Command();
 
+/**
+ * Main CLI entry point for SCM (Shadcn Component Manager)
+ */
 program.name("scm").description(description).version(version);
 
-// Register all commands
 program.addCommand(create);
 program.addCommand(login);
 program.addCommand(logoutCmd);

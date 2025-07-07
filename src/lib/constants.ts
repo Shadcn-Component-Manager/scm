@@ -20,7 +20,9 @@ export const GITHUB_SCOPES = ["repo", "read:user", "user:email"];
 // Cache configuration
 export const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
-// Reserved component names (shadcn/ui internal components)
+/**
+ * Reserved component names (shadcn/ui internal components)
+ */
 export const RESERVED_COMPONENT_NAMES = [
   // Core UI Components
   "accordion",
@@ -377,12 +379,16 @@ export const RESERVED_COMPONENT_NAMES = [
   "theme-emerald",
 ];
 
-// Function to check if a component name is reserved
+/**
+ * Checks if a component name is reserved
+ */
 export function isReservedComponentName(name: string): boolean {
   return RESERVED_COMPONENT_NAMES.includes(name.toLowerCase());
 }
 
-// Function to get reserved names for a specific category
+/**
+ * Gets reserved names for a specific category
+ */
 export function getReservedNamesByCategory(category?: string): string[] {
   if (!category) return RESERVED_COMPONENT_NAMES;
 

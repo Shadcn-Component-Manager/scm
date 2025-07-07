@@ -12,6 +12,12 @@ export interface VersionInfo {
   hasChanges: boolean;
 }
 
+/**
+ * Detects version changes by analyzing file modifications
+ * @param componentPath - Path to the component directory
+ * @param currentVersion - Current version string
+ * @returns Promise resolving to version information
+ */
 export async function detectVersionChanges(
   componentPath: string,
   currentVersion: string,
@@ -19,18 +25,15 @@ export async function detectVersionChanges(
   const spinner = ora("📊 Analyzing component changes...").start();
 
   try {
-    // Get all files in the component directory
     const files = await getAllFiles(componentPath);
     const fileHashes: Record<string, string> = {};
 
-    // Calculate hashes for all files
     for (const file of files) {
       const content = await fs.readFile(file, "utf-8");
       const hash = crypto.createHash("sha256").update(content).digest("hex");
       fileHashes[path.relative(componentPath, file)] = hash;
     }
 
-    // Check if we have previous hashes stored
     const hashFile = path.join(componentPath, ".version-hashes.json");
     let previousHashes: Record<string, string> = {};
 
@@ -38,12 +41,10 @@ export async function detectVersionChanges(
       previousHashes = await fs.readJson(hashFile);
     }
 
-    // Compare hashes to detect changes
     const changedFiles: string[] = [];
     const newFiles: string[] = [];
     const deletedFiles: string[] = [];
 
-    // Check for changed and new files
     for (const [file, hash] of Object.entries(fileHashes)) {
       if (previousHashes[file]) {
         if (previousHashes[file] !== hash) {
@@ -54,7 +55,6 @@ export async function detectVersionChanges(
       }
     }
 
-    // Check for deleted files
     for (const file of Object.keys(previousHashes)) {
       if (!fileHashes[file]) {
         deletedFiles.push(file);
@@ -74,7 +74,6 @@ export async function detectVersionChanges(
       };
     }
 
-    // Determine change type based on file changes
     const changeType = determineChangeType(
       changedFiles,
       newFiles,
@@ -88,7 +87,6 @@ export async function detectVersionChanges(
       );
     }
 
-    // Save new hashes
     await fs.writeJson(hashFile, fileHashes, { spaces: 2 });
 
     spinner.succeed(
@@ -109,6 +107,11 @@ export async function detectVersionChanges(
   }
 }
 
+/**
+ * Recursively gets all relevant files in a directory
+ * @param dir - Directory to scan
+ * @returns Promise resolving to array of file paths
+ */
 async function getAllFiles(dir: string): Promise<string[]> {
   const files: string[] = [];
   const items = await fs.readdir(dir);
@@ -118,12 +121,10 @@ async function getAllFiles(dir: string): Promise<string[]> {
     const stat = await fs.stat(fullPath);
 
     if (stat.isDirectory()) {
-      // Skip node_modules and .git
       if (item !== "node_modules" && item !== ".git") {
         files.push(...(await getAllFiles(fullPath)));
       }
     } else {
-      // Only include relevant file types
       if (
         item.endsWith(".tsx") ||
         item.endsWith(".ts") ||
@@ -142,13 +143,19 @@ async function getAllFiles(dir: string): Promise<string[]> {
   return files;
 }
 
+/**
+ * Determines the type of version change based on file modifications
+ * @param changedFiles - Array of changed file paths
+ * @param newFiles - Array of new file paths
+ * @param deletedFiles - Array of deleted file paths
+ * @returns Change type (patch, minor, or major)
+ */
 function determineChangeType(
   changedFiles: string[],
   newFiles: string[],
   deletedFiles: string[],
 ): "patch" | "minor" | "major" {
-  // Major version bump for breaking changes
-  const breakingChanges = ["registry.json", "package.json"]; // Schema changes, dependency changes
+  const breakingChanges = ["registry.json", "package.json"];
 
   for (const file of [...changedFiles, ...newFiles, ...deletedFiles]) {
     if (breakingChanges.some((pattern) => file.includes(pattern))) {
@@ -156,8 +163,7 @@ function determineChangeType(
     }
   }
 
-  // Minor version bump for new features
-  const featureFiles = [".tsx", ".ts", ".js", ".jsx"]; // Component files
+  const featureFiles = [".tsx", ".ts", ".js", ".jsx"];
 
   const hasNewFeatures = newFiles.some((file) =>
     featureFiles.some((ext) => file.endsWith(ext)),
@@ -167,18 +173,34 @@ function determineChangeType(
     return "minor";
   }
 
-  // Patch version bump for bug fixes and minor changes
   return "patch";
 }
 
+/**
+ * Validates if a version string is valid semver
+ * @param version - Version string to validate
+ * @returns True if valid, false otherwise
+ */
 export function validateVersion(version: string): boolean {
   return semver.valid(version) !== null;
 }
 
+/**
+ * Compares two version strings
+ * @param v1 - First version string
+ * @param v2 - Second version string
+ * @returns Comparison result (-1, 0, 1)
+ */
 export function compareVersions(v1: string, v2: string): number {
   return semver.compare(v1, v2);
 }
 
+/**
+ * Checks if version v1 is greater than version v2
+ * @param v1 - First version string
+ * @param v2 - Second version string
+ * @returns True if v1 > v2, false otherwise
+ */
 export function isVersionGreater(v1: string, v2: string): boolean {
   return semver.gt(v1, v2);
 }

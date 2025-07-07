@@ -8,6 +8,9 @@ import path from "path";
 import { REGISTRY_URL } from "../lib/constants.js";
 import { getGitHubUser } from "../lib/github.js";
 
+/**
+ * Command to fork a component from the registry
+ */
 export const fork = new Command()
   .name("fork")
   .description("Fork a component from the registry")
@@ -35,7 +38,6 @@ export const fork = new Command()
         chalk.green(`✅ Fetched ${chalk.cyan(componentName)}`),
       );
 
-      // Get new component name
       let newComponentName = options.name;
       if (!newComponentName) {
         const { name: inputName } = await inquirer.prompt([
@@ -49,7 +51,6 @@ export const fork = new Command()
         newComponentName = inputName;
       }
 
-      // Get GitHub user for new namespace
       let newNamespace: string;
       try {
         const user = await getGitHubUser();
@@ -69,11 +70,9 @@ export const fork = new Command()
         `🔀 Forking to ${chalk.cyan(`${newNamespace}/${newComponentName}`)}...`,
       ).start();
 
-      // Create component directory
       const newComponentDir = path.join(CWD, "components", newComponentName);
       await fs.ensureDir(newComponentDir);
 
-      // Download component files
       for (const file of registryItem.files) {
         const fileUrl = `${REGISTRY_URL}/${namespace}/${name}/${options.version}/${file.path}`;
         const { data: fileContent } = await axios.get(fileUrl);
@@ -83,7 +82,6 @@ export const fork = new Command()
         await fs.writeFile(newFilePath, fileContent);
       }
 
-      // Download README or create basic one
       const readmeUrl = `${REGISTRY_URL}/${namespace}/${name}/${options.version}/README.md`;
       try {
         const { data: readmeContent } = await axios.get(readmeUrl);
@@ -112,7 +110,6 @@ ${registryItem.description}
         );
       }
 
-      // Create new registry.json with updated metadata
       const newRegistryItem = {
         ...registryItem,
         name: newComponentName,
@@ -121,7 +118,7 @@ ${registryItem.description}
         author: `${newNamespace} <${newNamespace}@users.noreply.github.com>`,
         files: registryItem.files.map((file: any) => ({
           ...file,
-          path: path.basename(file.path), // Update paths to be relative to new component
+          path: path.basename(file.path),
         })),
       };
 

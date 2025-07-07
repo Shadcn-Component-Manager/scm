@@ -1,6 +1,4 @@
 import chalk from "chalk";
-import crypto from "crypto";
-import inquirer from "inquirer";
 import { Octokit } from "octokit";
 import ora from "ora";
 import { readConfig, writeConfig } from "./config.js";
@@ -14,6 +12,11 @@ import {
 
 let octokit: Octokit | null = null;
 
+/**
+ * Gets or creates an Octokit instance for GitHub API access
+ * @returns Promise resolving to Octokit instance
+ * @throws Error if user is not authenticated
+ */
 export async function getOctokit(): Promise<Octokit> {
   if (octokit) {
     return octokit;
@@ -28,50 +31,74 @@ export async function getOctokit(): Promise<Octokit> {
   return octokit;
 }
 
+/**
+ * Gets the authenticated GitHub user information
+ * @returns Promise resolving to user data
+ */
 export async function getGitHubUser() {
   const kit = await getOctokit();
   const { data: user } = await kit.rest.users.getAuthenticated();
   return user;
 }
 
+/**
+ * Authenticates with GitHub using OAuth device flow
+ * @returns Promise resolving to access token
+ */
 export async function authenticateWithGitHub(): Promise<string> {
-  const spinner = ora("🔐 Starting GitHub OAuth authentication...").start();
+  const spinner = ora("🔐 Starting GitHub OAuth device flow...").start();
 
   try {
-    // Clear any existing token to force fresh authentication
     const config = await readConfig();
     config.token = undefined;
     await writeConfig(config);
     octokit = null;
 
-    // Generate PKCE parameters for secure client-side auth
-    const codeVerifier = generateCodeVerifier();
-    const codeChallenge = await generateCodeChallenge(codeVerifier);
-    const state = crypto.randomBytes(32).toString("hex");
+    spinner.text = "🔄 Requesting device authorization...";
 
-    // Create authorization URL with PKCE
-    const authUrl = new URL("https://github.com/login/oauth/authorize");
-    authUrl.searchParams.set("client_id", GITHUB_CLIENT_ID);
-    authUrl.searchParams.set("scope", GITHUB_SCOPES.join(" "));
-    authUrl.searchParams.set("state", state);
-    authUrl.searchParams.set("code_challenge", codeChallenge);
-    authUrl.searchParams.set("code_challenge_method", "S256");
-    authUrl.searchParams.set("redirect_uri", "urn:ietf:wg:oauth:2.0:oob");
+    const deviceResponse = await fetch("https://github.com/login/device/code", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        client_id: GITHUB_CLIENT_ID,
+        scope: GITHUB_SCOPES.join(" "),
+      }),
+    });
 
-    spinner.succeed("✅ GitHub OAuth URL generated");
+    if (!deviceResponse.ok) {
+      const errorText = await deviceResponse.text();
+      throw new Error(
+        `GitHub device flow error: ${deviceResponse.status} ${deviceResponse.statusText} - ${errorText}`,
+      );
+    }
+
+    const deviceData = await deviceResponse.json();
+
+    if (deviceData.error) {
+      throw new Error(
+        `GitHub device flow error: ${deviceData.error_description || deviceData.error}`,
+      );
+    }
+
+    spinner.succeed("✅ Device authorization requested");
 
     console.log(chalk.blue("\n🔗 Please visit this URL to authorize SCM:"));
-    console.log(chalk.cyan(authUrl.toString()));
+    console.log(chalk.cyan(deviceData.verification_uri));
+    console.log(
+      chalk.yellow(`\n📝 Enter this code: ${chalk.bold(deviceData.user_code)}`),
+    );
     console.log(
       chalk.gray(
-        "\nAfter authorization, you will receive a code. Please paste it below:",
+        `\n⏱️  You have ${Math.floor(deviceData.expires_in / 60)} minutes to complete the authorization.`,
       ),
     );
 
-    // Open browser automatically
     try {
       const { default: open } = await import("open");
-      await open(authUrl.toString());
+      await open(deviceData.verification_uri);
       console.log(chalk.green("✅ Opened browser automatically"));
     } catch (error) {
       console.log(
@@ -81,23 +108,13 @@ export async function authenticateWithGitHub(): Promise<string> {
       );
     }
 
-    // Get authorization code from user
-    const { code } = await inquirer.prompt([
-      {
-        type: "input",
-        name: "code",
-        message: "Enter the authorization code from GitHub:",
-        validate: (input: string) => {
-          if (!input.trim()) {
-            return "Authorization code is required";
-          }
-          return true;
-        },
-      },
-    ] as any);
+    spinner.start("⏳ Waiting for authorization...");
 
-    // Exchange code for access token using PKCE
-    const token = await exchangeCodeForToken(code.trim(), codeVerifier, state);
+    const token = await pollForAuthorization(
+      deviceData.device_code,
+      deviceData.interval,
+      deviceData.expires_in,
+    );
 
     spinner.succeed(chalk.green("✅ Authentication successful"));
     return token;
@@ -108,70 +125,100 @@ export async function authenticateWithGitHub(): Promise<string> {
   }
 }
 
-// PKCE helper functions for secure client-side auth
-function generateCodeVerifier(): string {
-  return crypto.randomBytes(32).toString("base64url");
-}
-
-async function generateCodeChallenge(codeVerifier: string): Promise<string> {
-  const hash = crypto.createHash("sha256").update(codeVerifier).digest();
-  return hash.toString("base64url");
-}
-
-async function exchangeCodeForToken(
-  code: string,
-  codeVerifier: string,
-  expectedState: string,
+/**
+ * Polls GitHub for authorization completion
+ * @param deviceCode - Device verification code
+ * @param interval - Minimum polling interval in seconds
+ * @param expiresIn - Expiration time in seconds
+ * @returns Promise resolving to access token
+ */
+async function pollForAuthorization(
+  deviceCode: string,
+  interval: number,
+  expiresIn: number,
 ): Promise<string> {
-  const spinner = ora(
-    "🔄 Exchanging authorization code for access token...",
-  ).start();
+  const startTime = Date.now();
+  const expirationTime = startTime + expiresIn * 1000;
+  let currentInterval = interval * 1000;
 
-  try {
-    const response = await fetch(
-      "https://github.com/login/oauth/access_token",
-      {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
+  while (Date.now() < expirationTime) {
+    try {
+      const response = await fetch(
+        "https://github.com/login/oauth/access_token",
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            client_id: GITHUB_CLIENT_ID,
+            device_code: deviceCode,
+            grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+          }),
         },
-        body: JSON.stringify({
-          client_id: GITHUB_CLIENT_ID,
-          code,
-          code_verifier: codeVerifier,
-          redirect_uri: "urn:ietf:wg:oauth:2.0:oob",
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `GitHub API error: ${response.status} ${response.statusText} - ${errorText}`,
       );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `GitHub API error: ${response.status} ${response.statusText} - ${errorText}`,
+        );
+      }
+
+      const data = await response.json();
+
+      if (data.error) {
+        switch (data.error) {
+          case "authorization_pending":
+            break;
+          case "slow_down":
+            currentInterval = (data.interval || interval + 5) * 1000;
+            break;
+          case "expired_token":
+            throw new Error(
+              "Authorization code has expired. Please try again.",
+            );
+          case "access_denied":
+            throw new Error("Authorization was denied by the user.");
+          case "unsupported_grant_type":
+            throw new Error("Device flow is not supported by this GitHub app.");
+          case "incorrect_client_credentials":
+            throw new Error("Invalid client credentials.");
+          case "incorrect_device_code":
+            throw new Error("Invalid device code.");
+          case "device_flow_disabled":
+            throw new Error("Device flow is not enabled for this GitHub app.");
+          default:
+            throw new Error(
+              `GitHub API error: ${data.error_description || data.error}`,
+            );
+        }
+      } else if (data.access_token) {
+        return data.access_token;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, currentInterval));
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        !error.message.includes("authorization_pending")
+      ) {
+        throw error;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, currentInterval));
     }
-
-    const data = await response.json();
-
-    if (data.error) {
-      throw new Error(
-        `GitHub API error: ${data.error_description || data.error}`,
-      );
-    }
-
-    if (!data.access_token) {
-      throw new Error("No access token received from GitHub");
-    }
-
-    spinner.succeed("✅ Access token received successfully");
-    return data.access_token;
-  } catch (error) {
-    spinner.fail("❌ Failed to exchange code for token");
-    throw error;
   }
+
+  throw new Error("Authorization timed out. Please try again.");
 }
 
+/**
+ * Validates a GitHub access token
+ * @param token - Access token to validate
+ * @returns Promise resolving to validation result
+ */
 export async function validateToken(token: string): Promise<boolean> {
   try {
     const testOctokit = new Octokit({ auth: token });
@@ -182,6 +229,9 @@ export async function validateToken(token: string): Promise<boolean> {
   }
 }
 
+/**
+ * Logs out the current user by clearing stored token
+ */
 export async function logout(): Promise<void> {
   const config = await readConfig();
   config.token = undefined;
@@ -189,7 +239,16 @@ export async function logout(): Promise<void> {
   octokit = null;
 }
 
-// GitHub API helper functions for registry operations
+/**
+ * Creates a pull request on GitHub
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param title - PR title
+ * @param body - PR body
+ * @param head - Source branch
+ * @param base - Target branch
+ * @returns Promise resolving to PR data
+ */
 export async function createPullRequest(
   owner: string,
   repo: string,
@@ -210,6 +269,14 @@ export async function createPullRequest(
   return pr;
 }
 
+/**
+ * Creates a new branch on GitHub
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param branch - Branch name
+ * @param sha - Commit SHA to base branch on
+ * @returns Promise resolving to ref data
+ */
 export async function createBranch(
   owner: string,
   repo: string,
@@ -226,6 +293,17 @@ export async function createBranch(
   return ref;
 }
 
+/**
+ * Creates or updates a file in a GitHub repository
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param path - File path in repository
+ * @param message - Commit message
+ * @param content - File content
+ * @param branch - Target branch
+ * @param sha - Current file SHA (for updates)
+ * @returns Promise resolving to file data
+ */
 export async function createOrUpdateFile(
   owner: string,
   repo: string,
@@ -252,6 +330,12 @@ export async function createOrUpdateFile(
   return file;
 }
 
+/**
+ * Gets repository information
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @returns Promise resolving to repository data
+ */
 export async function getRepository(owner: string, repo: string) {
   const kit = await getOctokit();
   const { data: repository } = await kit.rest.repos.get({
@@ -261,6 +345,10 @@ export async function getRepository(owner: string, repo: string) {
   return repository;
 }
 
+/**
+ * Gets the SHA of the main branch
+ * @returns Promise resolving to commit SHA
+ */
 export async function getMainBranchSha() {
   const kit = await getOctokit();
   const { data: branch } = await kit.rest.repos.getBranch({

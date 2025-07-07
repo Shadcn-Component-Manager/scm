@@ -12,16 +12,19 @@ const configSchema = z.object({
   token: z.string().optional(),
 });
 
-type Config = z.infer<typeof configSchema>;
+export type Config = z.infer<typeof configSchema>;
 
-async function readConfig(): Promise<Config> {
+/**
+ * Reads the SCM configuration file
+ * @returns Promise resolving to the configuration object
+ */
+export async function readConfig(): Promise<Config> {
   const spinner = ora("📖 Reading configuration...").start();
   try {
     if (!(await fs.pathExists(configPath))) {
       spinner.succeed("✅ No config file found. Using default configuration");
       return {};
     }
-
     const configContent = await fs.readJson(configPath);
     const parsedConfig = configSchema.parse(configContent);
     spinner.succeed(chalk.green("✅ Configuration loaded successfully"));
@@ -40,7 +43,11 @@ async function readConfig(): Promise<Config> {
   }
 }
 
-async function writeConfig(config: Config): Promise<void> {
+/**
+ * Writes the SCM configuration to file
+ * @param config - Configuration object to save
+ */
+export async function writeConfig(config: Config): Promise<void> {
   const spinner = ora("💾 Saving configuration...").start();
   try {
     await fs.ensureDir(configDir);
@@ -52,5 +59,3 @@ async function writeConfig(config: Config): Promise<void> {
     process.exit(1);
   }
 }
-
-export { readConfig, writeConfig, type Config };

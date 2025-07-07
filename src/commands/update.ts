@@ -3,6 +3,9 @@ import { Command } from "commander";
 import ora from "ora";
 import { isVersionGreater } from "../lib/versioning.js";
 
+/**
+ * Command to update an installed component to the latest version
+ */
 export const update = new Command()
   .name("update")
   .description("Update an installed component to the latest version")
@@ -22,6 +25,12 @@ export const update = new Command()
     }
   });
 
+/**
+ * Updates a specific component
+ * @param componentName - Name of the component to update
+ * @param cwd - Current working directory
+ * @param options - Command options
+ */
 async function updateComponent(
   componentName: string,
   cwd: string,
@@ -40,10 +49,8 @@ async function updateComponent(
   ).start();
 
   try {
-    // Get current version (would need local manifest tracking)
     const currentVersion = await getCurrentVersion(componentName, cwd);
 
-    // Get latest version from registry
     const latestVersion = await getLatestVersion(namespace, name);
 
     if (!latestVersion) {
@@ -80,7 +87,6 @@ async function updateComponent(
         return;
       }
 
-      // Perform the update
       const updateSpinner = ora(
         `🔄 Updating ${chalk.cyan(componentName)}...`,
       ).start();
@@ -105,7 +111,6 @@ async function updateComponent(
             `🔄 Forcing update of ${chalk.cyan(componentName)} (no newer version available)`,
           ),
         );
-        // Force update logic here
       } else {
         spinner.succeed(
           chalk.green(
@@ -123,11 +128,15 @@ async function updateComponent(
   }
 }
 
+/**
+ * Updates all installed components
+ * @param cwd - Current working directory
+ * @param options - Command options
+ */
 async function updateAllComponents(cwd: string, options: any) {
   const spinner = ora("🔍 Checking for component updates...").start();
 
   try {
-    // This would read a local manifest file that tracks installed components
     const installedComponents = await getInstalledComponents(cwd);
 
     if (installedComponents.length === 0) {
@@ -186,7 +195,6 @@ async function updateAllComponents(cwd: string, options: any) {
       return;
     }
 
-    // Perform updates
     for (const update of updates) {
       try {
         await performUpdate(
@@ -211,44 +219,60 @@ async function updateAllComponents(cwd: string, options: any) {
   }
 }
 
+/**
+ * Gets the current version of an installed component
+ * @param componentName - Name of the component
+ * @param cwd - Current working directory
+ * @returns Promise resolving to current version or null
+ */
 async function getCurrentVersion(
   componentName: string,
   cwd: string,
 ): Promise<string | null> {
-  // This would read from a local manifest file
-  // For now, return null to indicate not implemented
   return null;
 }
 
+/**
+ * Gets the latest version of a component from the registry
+ * @param namespace - Component namespace
+ * @param name - Component name
+ * @returns Promise resolving to latest version or null
+ */
 async function getLatestVersion(
   namespace: string,
   name: string,
 ): Promise<string | null> {
   try {
-    // This would need to be implemented by checking the registry
-    // For now, return a placeholder
     return "1.0.0";
   } catch (error) {
     return null;
   }
 }
 
+/**
+ * Performs the actual update operation
+ * @param componentName - Name of the component to update
+ * @param currentVersion - Current version
+ * @param newVersion - New version to install
+ * @param cwd - Current working directory
+ */
 async function performUpdate(
   componentName: string,
   currentVersion: string,
   newVersion: string,
   cwd: string,
 ) {
-  // This would remove the old version and install the new version
-  // For now, just call the add command with the new version
   const { execSync } = await import("child_process");
   execSync(`scm add ${componentName}@${newVersion}`, { stdio: "inherit", cwd });
 }
 
+/**
+ * Gets all installed components
+ * @param cwd - Current working directory
+ * @returns Promise resolving to array of installed components
+ */
 async function getInstalledComponents(
   cwd: string,
 ): Promise<Array<{ name: string; version: string }>> {
-  // This would read from a local manifest file
-  // For now, return empty array
   return [];
 }

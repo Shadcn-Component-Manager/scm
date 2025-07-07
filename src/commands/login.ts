@@ -7,6 +7,9 @@ import {
   validateToken,
 } from "../lib/github.js";
 
+/**
+ * Command to authenticate with GitHub using OAuth
+ */
 export const login = new Command()
   .name("login")
   .description("Authenticate with GitHub using OAuth")
@@ -15,7 +18,6 @@ export const login = new Command()
     try {
       const config = await readConfig();
 
-      // Check if already logged in
       if (config.token && !options.force) {
         const isValid = await validateToken(config.token);
         if (isValid) {
@@ -30,10 +32,8 @@ export const login = new Command()
         chalk.gray("This will open your browser to authorize the application"),
       );
 
-      // Start OAuth flow
       const token = await authenticateWithGitHub();
 
-      // Save token to config
       config.token = token;
       await writeConfig(config);
 
@@ -45,6 +45,9 @@ export const login = new Command()
     }
   });
 
+/**
+ * Command to log out from GitHub and clear credentials
+ */
 export const logoutCmd = new Command()
   .name("logout")
   .description("Log out from GitHub and clear credentials")

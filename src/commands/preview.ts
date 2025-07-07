@@ -4,6 +4,9 @@ import { Command } from "commander";
 import ora from "ora";
 import { REGISTRY_URL } from "../lib/constants.js";
 
+/**
+ * Command to preview a component from the registry
+ */
 export const preview = new Command()
   .name("preview")
   .description("Preview a component from the registry")
@@ -29,14 +32,12 @@ export const preview = new Command()
         chalk.green(`✅ Fetched ${chalk.cyan(componentName)}`),
       );
 
-      // Display component information
       console.log(chalk.bold(`\n${registryItem.title}`));
       console.log(chalk.gray(`by ${registryItem.author}`));
       console.log(chalk.gray(`Version: ${options.version}`));
       console.log(chalk.gray(`Type: ${registryItem.type}`));
       console.log(`\n${registryItem.description}\n`);
 
-      // Display categories
       if (registryItem.categories?.length > 0) {
         console.log(
           chalk.cyan("Categories:"),
@@ -44,7 +45,6 @@ export const preview = new Command()
         );
       }
 
-      // Display dependencies
       if (registryItem.dependencies?.length > 0) {
         console.log(
           chalk.yellow("\nDependencies:"),
@@ -59,7 +59,6 @@ export const preview = new Command()
         );
       }
 
-      // Try to fetch and display README
       const readmeUrl = `${REGISTRY_URL}/${namespace}/${name}/${options.version}/README.md`;
       try {
         const { data: readmeContent } = await axios.get(readmeUrl);
@@ -71,13 +70,11 @@ export const preview = new Command()
         console.log(chalk.yellow("\nNo README found for this component"));
       }
 
-      // Display files included in the component
       console.log(chalk.bold("\n📁 Files:"));
       registryItem.files.forEach((file: any, index: number) => {
         console.log(`  ${index + 1}. ${chalk.cyan(file.path)} (${file.type})`);
       });
 
-      // Display CSS variables
       if (registryItem.cssVars) {
         console.log(chalk.bold("\n🎨 CSS Variables:"));
         if (registryItem.cssVars.theme) {

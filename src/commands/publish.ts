@@ -20,6 +20,9 @@ import { registryItemSchema, registrySchema } from "../lib/registry.js";
 import { validateComponent } from "../lib/validator.js";
 import { detectVersionChanges } from "../lib/versioning.js";
 
+/**
+ * Command to publish a component to the registry
+ */
 export const publish = new Command()
   .name("publish")
   .description("Publish a component to the registry")
@@ -48,7 +51,6 @@ export const publish = new Command()
     try {
       const registryJson = await fs.readJson(registryJsonPath);
 
-      // First, try to validate as a registry collection
       const registryValidation = registrySchema.safeParse(registryJson);
 
       let selectedItem;
@@ -56,7 +58,6 @@ export const publish = new Command()
       let files;
 
       if (registryValidation.success) {
-        // It's a registry collection - ask which item to publish
         spinner.succeed(
           chalk.green(
             `✅ Found registry collection: ${chalk.cyan(registryJson.name)}`,
@@ -70,7 +71,6 @@ export const publish = new Command()
           process.exit(1);
         }
 
-        // If specific item is provided via --item flag
         if (options.item) {
           selectedItem = items.find((item) => item.name === options.item);
           if (!selectedItem) {
@@ -86,7 +86,6 @@ export const publish = new Command()
             process.exit(1);
           }
         } else {
-          // Ask user to select an item
           const { selectedItemName } = await inquirer.prompt([
             {
               type: "list",
@@ -102,7 +101,6 @@ export const publish = new Command()
           selectedItem = items.find((item) => item.name === selectedItemName);
         }
 
-        // Validate the selected item
         if (!selectedItem) {
           spinner.fail(chalk.red("❌ No item selected"));
           process.exit(1);
@@ -127,7 +125,6 @@ export const publish = new Command()
           chalk.green(`✅ Selected item: ${chalk.cyan(componentName)}`),
         );
       } else {
-        // Try to validate as a single registry item
         const itemValidation = registryItemSchema.safeParse(registryJson);
 
         if (!itemValidation.success) {
@@ -150,7 +147,6 @@ export const publish = new Command()
         );
       }
 
-      // Validate component files and structure
       spinner.text = "🔍 Validating component files...";
       const validationResult = await validateComponent(CWD, selectedItem);
       if (!validationResult.isValid) {
@@ -162,7 +158,6 @@ export const publish = new Command()
       }
       spinner.succeed(chalk.green("✅ Component files validated"));
 
-      // Detect version changes
       spinner.text = "📊 Analyzing version changes...";
       const currentVersion = selectedItem.version || "1.0.0";
       const versionInfo = await detectVersionChanges(CWD, currentVersion);
@@ -193,7 +188,6 @@ export const publish = new Command()
         spinner.succeed(chalk.green("✅ No version changes detected"));
       }
 
-      // Get GitHub user and prepare for publish
       spinner.text = "🔧 Preparing for publish...";
       const user = await getGitHubUser();
       const version = versionInfo.hasChanges
@@ -201,7 +195,6 @@ export const publish = new Command()
         : currentVersion;
       const branchName = `component/${user.login}/${componentName}-${version}`;
 
-      // Get the latest commit from main branch
       const mainBranchSha = await getMainBranchSha();
 
       spinner.text = "🌿 Creating new branch...";
@@ -212,11 +205,9 @@ export const publish = new Command()
         mainBranchSha,
       );
 
-      // Upload component files
       spinner.text = "📤 Uploading component files...";
       const componentDir = `components/${user.login}/${componentName}/${version}`;
 
-      // Upload registry.json first (use the selected item, not the full collection)
       const updatedRegistryJson = {
         ...selectedItem,
         version: version,
@@ -233,7 +224,6 @@ export const publish = new Command()
         branchName,
       );
 
-      // Upload component files
       if (files && files.length > 0) {
         for (const file of files) {
           const filePath = path.join(CWD, file.path);
@@ -253,7 +243,6 @@ export const publish = new Command()
         }
       }
 
-      // Upload README if it exists
       const readmePath = path.join(CWD, "README.md");
       if (await fs.pathExists(readmePath)) {
         const readmeContent = await fs.readFile(readmePath, "utf-8");
@@ -267,7 +256,6 @@ export const publish = new Command()
         );
       }
 
-      // Create pull request
       spinner.text = "🔗 Creating pull request...";
       const pr = await createPullRequest(
         REGISTRY_OWNER,

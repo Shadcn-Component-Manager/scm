@@ -7,13 +7,15 @@ import path from "path";
 import { getCachedComponent, setCachedComponent } from "../lib/cache.js";
 import { REGISTRY_URL } from "../lib/constants.js";
 
+/**
+ * Command to add a component to the current project
+ */
 export const add = new Command()
   .name("add")
   .description("Add a component to your project")
   .argument("<component-name>", "Component name (e.g., user/button[@1.0.0])")
   .option("-f, --force", "Force refresh cache")
   .action(async (componentName, options) => {
-    // Parse component name and version
     const versionMatch = componentName.match(/^(.+?)@(.+)$/);
     const componentWithoutVersion = versionMatch
       ? versionMatch[1]
@@ -33,7 +35,6 @@ export const add = new Command()
     const CWD = process.cwd();
     const componentsJsonPath = path.join(CWD, "components.json");
 
-    // Validate shadcn/ui setup
     if (!(await fs.pathExists(componentsJsonPath))) {
       console.error(chalk.red("❌ components.json not found"));
       console.log(
@@ -42,7 +43,6 @@ export const add = new Command()
       process.exit(1);
     }
 
-    // Read aliases from components.json
     let aliases = { components: "@/components", utils: "@/lib/utils" };
     try {
       const componentsJson = await fs.readJson(componentsJsonPath);
@@ -58,7 +58,6 @@ export const add = new Command()
     try {
       let registryItem: any;
 
-      // Try cache first (unless force refresh)
       const cacheKey = `${namespace}-${name}-${version}`;
       if (!options.force) {
         const cached = await getCachedComponent(namespace, name);
@@ -86,12 +85,10 @@ export const add = new Command()
 
       const installSpinner = ora("🔧 Installing component...").start();
 
-      // Install component files
       for (const file of registryItem.files) {
         const fileUrl = `${REGISTRY_URL}/${namespace}/${name}/${version}/${file.path}`;
         const { data: fileContent } = await axios.get(fileUrl);
 
-        // Map to local aliases
         const localPath = file.path.replace(
           "components",
           aliases.components.replace("@/", ""),
@@ -102,7 +99,6 @@ export const add = new Command()
         await fs.writeFile(installPath, fileContent);
       }
 
-      // Install npm dependencies using current package manager
       if (registryItem.dependencies?.length > 0) {
         installSpinner.text = "📦 Installing npm dependencies...";
         const { execSync } = await import("child_process");
@@ -122,13 +118,11 @@ export const add = new Command()
         }
       }
 
-      // Install registry dependencies from our SCM registry
       if (registryItem.registryDependencies?.length > 0) {
         installSpinner.text = "🔗 Installing registry dependencies...";
         for (const dep of registryItem.registryDependencies) {
           try {
             const { execSync } = await import("child_process");
-            // Use our SCM registry for dependencies
             execSync(`scm add ${dep}`, { stdio: "inherit", cwd: CWD });
           } catch (error) {
             console.warn(
@@ -140,7 +134,6 @@ export const add = new Command()
         }
       }
 
-      // Apply CSS variables
       if (registryItem.cssVars) {
         installSpinner.text = "🎨 Applying CSS variables...";
         await applyCssVariables(registryItem.cssVars, aliases, CWD);
@@ -162,6 +155,11 @@ export const add = new Command()
     }
   });
 
+/**
+ * Detects the package manager used in the current project
+ * @param cwd - Current working directory
+ * @returns Promise resolving to package manager name
+ */
 async function detectPackageManager(cwd: string): Promise<string> {
   const packageManagers = [
     { name: "pnpm", files: ["pnpm-lock.yaml"] },
@@ -178,10 +176,15 @@ async function detectPackageManager(cwd: string): Promise<string> {
     }
   }
 
-  // Default to npm if no lock file found
   return "npm";
 }
 
+/**
+ * Generates the install command for the specified package manager
+ * @param packageManager - Package manager name
+ * @param dependencies - Array of dependencies to install
+ * @returns Install command string
+ */
 function getInstallCommand(
   packageManager: string,
   dependencies: string[],
@@ -201,6 +204,12 @@ function getInstallCommand(
   }
 }
 
+/**
+ * Applies CSS variables to the project's CSS file
+ * @param cssVars - CSS variables object
+ * @param aliases - Project aliases configuration
+ * @param cwd - Current working directory
+ */
 async function applyCssVariables(cssVars: any, aliases: any, cwd: string) {
   const cssPath = path.join(cwd, aliases.css || "src/app/globals.css");
 
