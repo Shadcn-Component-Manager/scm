@@ -35,10 +35,16 @@ export async function getGitHubUser() {
 }
 
 export async function authenticateWithGitHub(): Promise<string> {
-  const spinner = ora("🔐 Starting GitHub authentication...").start();
+  const spinner = ora("🔐 Starting GitHub OAuth authentication...").start();
 
   try {
-    // Generate PKCE parameters
+    // Clear any existing token to force fresh authentication
+    const config = await readConfig();
+    config.token = undefined;
+    await writeConfig(config);
+    octokit = null;
+
+    // Generate PKCE parameters for secure client-side auth
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = await generateCodeChallenge(codeVerifier);
     const state = crypto.randomBytes(32).toString("hex");
@@ -50,6 +56,7 @@ export async function authenticateWithGitHub(): Promise<string> {
     authUrl.searchParams.set("state", state);
     authUrl.searchParams.set("code_challenge", codeChallenge);
     authUrl.searchParams.set("code_challenge_method", "S256");
+    authUrl.searchParams.set("redirect_uri", "urn:ietf:wg:oauth:2.0:oob");
 
     spinner.succeed("✅ GitHub OAuth URL generated");
 
@@ -57,9 +64,22 @@ export async function authenticateWithGitHub(): Promise<string> {
     console.log(chalk.cyan(authUrl.toString()));
     console.log(
       chalk.gray(
-        "\nAfter authorization, you will receive a code. Please paste it below",
+        "\nAfter authorization, you will receive a code. Please paste it below:",
       ),
     );
+
+    // Open browser automatically
+    try {
+      const { default: open } = await import("open");
+      await open(authUrl.toString());
+      console.log(chalk.green("✅ Opened browser automatically"));
+    } catch (error) {
+      console.log(
+        chalk.yellow(
+          "⚠️  Could not open browser automatically. Please copy and paste the URL above.",
+        ),
+      );
+    }
 
     // Get authorization code from user
     const { code } = await inquirer.prompt([
@@ -88,6 +108,7 @@ export async function authenticateWithGitHub(): Promise<string> {
   }
 }
 
+// PKCE helper functions for secure client-side auth
 function generateCodeVerifier(): string {
   return crypto.randomBytes(32).toString("base64url");
 }
@@ -119,9 +140,17 @@ async function exchangeCodeForToken(
           client_id: GITHUB_CLIENT_ID,
           code,
           code_verifier: codeVerifier,
+          redirect_uri: "urn:ietf:wg:oauth:2.0:oob",
         }),
       },
     );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `GitHub API error: ${response.status} ${response.statusText} - ${errorText}`,
+      );
+    }
 
     const data = await response.json();
 
@@ -207,15 +236,19 @@ export async function createOrUpdateFile(
   sha?: string,
 ) {
   const kit = await getOctokit();
+
+  const fileContent = Buffer.from(content).toString("base64");
+
   const { data: file } = await kit.rest.repos.createOrUpdateFileContents({
     owner,
     repo,
     path,
     message,
-    content: Buffer.from(content).toString("base64"),
+    content: fileContent,
     branch,
     sha,
   });
+
   return file;
 }
 
@@ -230,10 +263,10 @@ export async function getRepository(owner: string, repo: string) {
 
 export async function getMainBranchSha() {
   const kit = await getOctokit();
-  const { data: mainBranch } = await kit.rest.git.getRef({
+  const { data: branch } = await kit.rest.repos.getBranch({
     owner: REGISTRY_OWNER,
     repo: REGISTRY_REPO,
-    ref: `heads/${REGISTRY_BASE_BRANCH}`,
+    branch: REGISTRY_BASE_BRANCH,
   });
-  return mainBranch.object.sha;
+  return branch.commit.sha;
 }
