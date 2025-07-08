@@ -1,5 +1,11 @@
 # Shadcn Component Manager CLI
 
+[![npm version](https://img.shields.io/npm/v/@shadcn-component-manager/scm.svg)](https://www.npmjs.com/package/@shadcn-component-manager/scm)
+[![npm downloads](https://img.shields.io/npm/dm/@shadcn-component-manager/scm.svg)](https://www.npmjs.com/package/@shadcn-component-manager/scm)
+[![GitHub stars](https://img.shields.io/github/stars/Shadcn-Component-Manager/scm.svg?style=social&label=Star)](https://github.com/Shadcn-Component-Manager/scm)
+[![GitHub issues](https://img.shields.io/github/issues/Shadcn-Component-Manager/scm.svg)](https://github.com/Shadcn-Component-Manager/scm/issues)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 The official CLI package for the Shadcn Component Manager (SCM). Build your component & share it with the community.
 
 ## Quick Start
