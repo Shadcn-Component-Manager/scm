@@ -5,7 +5,7 @@ import fs from "fs-extra";
 import inquirer from "inquirer";
 import ora from "ora";
 import path from "path";
-import { REGISTRY_URL } from "../lib/constants.js";
+import { REGISTRY_URL, isReservedComponentName } from "../lib/constants.js";
 import { getGitHubUser } from "../lib/github.js";
 
 /**
@@ -51,11 +51,30 @@ export const fork = new Command()
         newComponentName = inputName;
       }
 
+      // Validate that the new component name is not reserved
+      if (isReservedComponentName(newComponentName)) {
+        console.error(
+          chalk.red(`❌ Component name "${newComponentName}" is reserved`),
+        );
+        console.error(
+          chalk.yellow(
+            "This name conflicts with an existing shadcn/ui component",
+          ),
+        );
+        console.error(
+          chalk.gray(
+            "Please choose a different name for your forked component",
+          ),
+        );
+        process.exit(1);
+      }
+
       let newNamespace: string;
       try {
         const user = await getGitHubUser();
         newNamespace = user.login;
       } catch (error) {
+        // If authentication fails after auto-login, fall back to manual input
         const { namespace: inputNamespace } = await inquirer.prompt([
           {
             type: "input",

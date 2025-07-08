@@ -97,6 +97,8 @@ scm add user/button@1.0.0
 scm add user/button --force
 ```
 
+**Note**: If you try to install a component with a reserved name (like `button`, `card`, `dialog`, etc.), SCM will automatically redirect to use `shadcn add` instead. This ensures you get the official shadcn/ui component when available.
+
 ### Searching Components
 
 ```bash
@@ -124,6 +126,18 @@ This will:
 2. Open your browser to authorize
 3. Ask you to paste the authorization code
 4. Store your access token securely
+
+## Reserved Component Names
+
+SCM automatically detects and handles reserved component names that conflict with official shadcn/ui components. These include:
+
+- **Core UI Components**: `button`, `card`, `dialog`, `input`, `form`, etc.
+- **Block Components**: `dashboard-01`, `sidebar-01`, `login-01`, etc.
+- **Chart Components**: `chart-area-default`, `chart-bar-default`, etc.
+- **Calendar Components**: `calendar-01`, `calendar-02`, etc.
+- **Theme Components**: `theme-daylight`, `theme-midnight`, etc.
+
+When you try to install a component with a reserved name, SCM will automatically redirect to use `shadcn add` instead, ensuring you get the official component.
 
 ## Component Structure
 
@@ -168,6 +182,7 @@ These files are automatically created and managed by SCM. They should not be man
   ],
   "dependencies": ["react@^18.0.0", "lucide-react@^0.3.0"],
   "registryDependencies": ["button"],
+  "version": "1.0.0",
   "author": "Your Name <your-email@example.com>",
   "categories": ["ui", "button"]
 }

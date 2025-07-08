@@ -14,6 +14,7 @@ import {
   createOrUpdateFile,
   createPullRequest,
   getGitHubUser,
+  getLatestComponentVersion,
   getMainBranchSha,
 } from "../lib/github.js";
 import { registryItemSchema, registrySchema } from "../lib/registry.js";
@@ -159,8 +160,18 @@ export const publish = new Command()
       spinner.succeed(chalk.green("✅ Component files validated"));
 
       spinner.text = "📊 Analyzing version changes...";
-      const currentVersion = selectedItem.version || "1.0.0";
-      const versionInfo = await detectVersionChanges(CWD, currentVersion);
+
+      const user = await getGitHubUser();
+
+      const latestRemoteVersion = await getLatestComponentVersion(
+        user.login,
+        componentName,
+      );
+      const localVersion = selectedItem.version || "0.0.1";
+
+      const baseVersion = latestRemoteVersion || localVersion;
+
+      const versionInfo = await detectVersionChanges(CWD, baseVersion);
 
       if (versionInfo.hasChanges) {
         spinner.succeed(
@@ -189,10 +200,9 @@ export const publish = new Command()
       }
 
       spinner.text = "🔧 Preparing for publish...";
-      const user = await getGitHubUser();
       const version = versionInfo.hasChanges
         ? versionInfo.newVersion
-        : currentVersion;
+        : baseVersion;
       const branchName = `component/${user.login}/${componentName}-${version}`;
 
       const mainBranchSha = await getMainBranchSha();

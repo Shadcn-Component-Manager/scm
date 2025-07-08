@@ -5,7 +5,7 @@ import fs from "fs-extra";
 import ora from "ora";
 import path from "path";
 import { getCachedComponent, setCachedComponent } from "../lib/cache.js";
-import { REGISTRY_URL } from "../lib/constants.js";
+import { REGISTRY_URL, isReservedComponentName } from "../lib/constants.js";
 
 /**
  * Command to add a component to the current project
@@ -30,6 +30,36 @@ export const add = new Command()
         ),
       );
       process.exit(1);
+    }
+
+    // Check if this is a reserved component name
+    if (isReservedComponentName(name)) {
+      console.log(
+        chalk.yellow(`⚠️  "${name}" is a reserved shadcn/ui component name`),
+      );
+      console.log(chalk.blue(`🔄 Redirecting to shadcn add ${name}...`));
+
+      try {
+        const { execSync } = await import("child_process");
+        execSync(`npx shadcn@latest add ${name}`, {
+          stdio: "inherit",
+          cwd: process.cwd(),
+        });
+        console.log(
+          chalk.green(`✅ Successfully installed ${name} using shadcn/ui`),
+        );
+        return;
+      } catch (error) {
+        console.error(
+          chalk.red(`❌ Failed to install ${name} using shadcn/ui`),
+        );
+        console.error(
+          chalk.yellow(
+            "💡 Make sure you have shadcn/ui initialized in your project",
+          ),
+        );
+        process.exit(1);
+      }
     }
 
     const CWD = process.cwd();
@@ -123,7 +153,25 @@ export const add = new Command()
         for (const dep of registryItem.registryDependencies) {
           try {
             const { execSync } = await import("child_process");
-            execSync(`scm add ${dep}`, { stdio: "inherit", cwd: CWD });
+
+            // Check if this dependency is a reserved component name
+            const depName = dep.split("/").pop() || dep;
+            if (isReservedComponentName(depName)) {
+              console.log(
+                chalk.yellow(
+                  `⚠️  Dependency "${depName}" is a reserved shadcn/ui component`,
+                ),
+              );
+              console.log(
+                chalk.blue(`🔄 Installing ${depName} using shadcn/ui...`),
+              );
+              execSync(`npx shadcn@latest add ${depName}`, {
+                stdio: "inherit",
+                cwd: CWD,
+              });
+            } else {
+              execSync(`scm add ${dep}`, { stdio: "inherit", cwd: CWD });
+            }
           } catch (error) {
             console.warn(
               chalk.yellow(
@@ -138,6 +186,9 @@ export const add = new Command()
         installSpinner.text = "🎨 Applying CSS variables...";
         await applyCssVariables(registryItem.cssVars, aliases, CWD);
       }
+
+      // Track the installed component for future updates
+      await trackInstalledComponent(componentName, version, CWD);
 
       installSpinner.succeed(
         chalk.green(`✅ ${chalk.cyan(componentName)} installed successfully`),
@@ -239,5 +290,36 @@ async function applyCssVariables(cssVars: any, aliases: any, cwd: string) {
 
     cssContent += cssVarsContent;
     await fs.writeFile(cssPath, cssContent);
+  }
+}
+
+/**
+ * Tracks an installed component for future updates
+ * @param componentName - Name of the component
+ * @param version - Version that was installed
+ * @param cwd - Current working directory
+ */
+async function trackInstalledComponent(
+  componentName: string,
+  version: string,
+  cwd: string,
+) {
+  try {
+    const trackingPath = path.join(cwd, ".scm-installed.json");
+    let tracking: Record<string, { version: string; installedAt: string }> = {};
+
+    if (await fs.pathExists(trackingPath)) {
+      tracking = await fs.readJson(trackingPath);
+    }
+
+    tracking[componentName] = {
+      version,
+      installedAt: new Date().toISOString(),
+    };
+
+    await fs.writeJson(trackingPath, tracking, { spaces: 2 });
+  } catch (error) {
+    // Silently fail - tracking is not critical
+    console.warn(chalk.yellow("⚠️  Failed to track installed component"));
   }
 }

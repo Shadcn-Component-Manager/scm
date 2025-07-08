@@ -36,9 +36,35 @@ export async function getOctokit(): Promise<Octokit> {
  * @returns Promise resolving to user data
  */
 export async function getGitHubUser() {
-  const kit = await getOctokit();
-  const { data: user } = await kit.rest.users.getAuthenticated();
-  return user;
+  try {
+    const kit = await getOctokit();
+    const { data: user } = await kit.rest.users.getAuthenticated();
+    return user;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message.includes("You are not logged in") ||
+        error.message.includes("401") ||
+        error.message.includes("Unauthorized"))
+    ) {
+      console.log(chalk.blue("🔐 Authentication required for this operation"));
+      console.log(chalk.gray("Starting GitHub OAuth flow..."));
+
+      const token = await authenticateWithGitHub();
+
+      const config = await readConfig();
+      config.token = token;
+      await writeConfig(config);
+
+      octokit = null;
+
+      const kit = await getOctokit();
+      const { data: user } = await kit.rest.users.getAuthenticated();
+      return user;
+    }
+
+    throw error;
+  }
 }
 
 /**
@@ -350,11 +376,68 @@ export async function getRepository(owner: string, repo: string) {
  * @returns Promise resolving to commit SHA
  */
 export async function getMainBranchSha() {
-  const kit = await getOctokit();
-  const { data: branch } = await kit.rest.repos.getBranch({
-    owner: REGISTRY_OWNER,
-    repo: REGISTRY_REPO,
-    branch: REGISTRY_BASE_BRANCH,
-  });
-  return branch.commit.sha;
+  try {
+    const kit = await getOctokit();
+    const { data: branch } = await kit.rest.repos.getBranch({
+      owner: REGISTRY_OWNER,
+      repo: REGISTRY_REPO,
+      branch: REGISTRY_BASE_BRANCH,
+    });
+    return branch.commit.sha;
+  } catch (error) {
+    // Authentication errors will be handled by getGitHubUser() which is called first
+    // Other errors should be re-thrown
+    throw error;
+  }
+}
+
+/**
+ * Gets the latest version of a component from the remote registry
+ * @param username - GitHub username of the component author
+ * @param componentName - Name of the component
+ * @returns Promise resolving to latest version string or null if not found
+ */
+export async function getLatestComponentVersion(
+  username: string,
+  componentName: string,
+): Promise<string | null> {
+  try {
+    const kit = await getOctokit();
+    const componentPath = `components/${username}/${componentName}`;
+
+    const { data: contents } = await kit.rest.repos.getContent({
+      owner: REGISTRY_OWNER,
+      repo: REGISTRY_REPO,
+      path: componentPath,
+      ref: REGISTRY_BASE_BRANCH,
+    });
+
+    if (!Array.isArray(contents)) {
+      return null;
+    }
+
+    const versionDirs = contents
+      .filter((item) => item.type === "dir")
+      .map((item) => item.name)
+      .filter((name) => /^\d+\.\d+\.\d+$/.test(name));
+
+    if (versionDirs.length === 0) {
+      return null;
+    }
+
+    const sortedVersions = versionDirs.sort((a, b) => {
+      const [aMajor, aMinor, aPatch] = a.split(".").map(Number);
+      const [bMajor, bMinor, bPatch] = b.split(".").map(Number);
+
+      if (aMajor !== bMajor) return bMajor - aMajor;
+      if (aMinor !== bMinor) return bMinor - aMinor;
+      return bPatch - aPatch;
+    });
+
+    return sortedVersions[0];
+  } catch (error) {
+    // If the component doesn't exist or there's an error, return null
+    // This includes authentication errors - we'll handle those in the calling function
+    return null;
+  }
 }

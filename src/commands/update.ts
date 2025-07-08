@@ -1,6 +1,10 @@
+import axios from "axios";
 import chalk from "chalk";
 import { Command } from "commander";
+import fs from "fs-extra";
 import ora from "ora";
+import path from "path";
+import { REGISTRY_URL } from "../lib/constants.js";
 import { isVersionGreater } from "../lib/versioning.js";
 
 /**
@@ -229,7 +233,16 @@ async function getCurrentVersion(
   componentName: string,
   cwd: string,
 ): Promise<string | null> {
-  return null;
+  try {
+    const trackingPath = path.join(cwd, ".scm-installed.json");
+    if (await fs.pathExists(trackingPath)) {
+      const tracking = await fs.readJson(trackingPath);
+      return tracking[componentName]?.version || null;
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
 }
 
 /**
@@ -243,7 +256,21 @@ async function getLatestVersion(
   name: string,
 ): Promise<string | null> {
   try {
-    return "1.0.0";
+    const indexUrl = `${REGISTRY_URL.replace("/components", "")}/registry.json`;
+    const { data: index } = await axios.get(indexUrl);
+
+    const component = index.find(
+      (item: any) => item.name === `${namespace}/${name}`,
+    );
+
+    if (component?.latestVersion) {
+      return component.latestVersion;
+    }
+
+    const componentUrl = `${REGISTRY_URL}/${namespace}/${name}/latest/registry.json`;
+    const { data: registryItem } = await axios.get(componentUrl);
+
+    return registryItem.version || null;
   } catch (error) {
     return null;
   }
@@ -274,5 +301,17 @@ async function performUpdate(
 async function getInstalledComponents(
   cwd: string,
 ): Promise<Array<{ name: string; version: string }>> {
-  return [];
+  try {
+    const trackingPath = path.join(cwd, ".scm-installed.json");
+    if (await fs.pathExists(trackingPath)) {
+      const tracking = await fs.readJson(trackingPath);
+      return Object.entries(tracking).map(([name, data]: [string, any]) => ({
+        name,
+        version: data.version,
+      }));
+    }
+    return [];
+  } catch (error) {
+    return [];
+  }
 }
