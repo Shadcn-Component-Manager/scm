@@ -1,6 +1,6 @@
-# Shadcn Component Manager (SCM)
+# Shadcn Component Manager CLI
 
-A powerful CLI tool for creating, sharing, and installing shadcn/ui components with ease. Build your component library and share it with the community.
+The official CLI package for the Shadcn Component Manager (SCM). Build your component & share it with the community.
 
 ## Quick Start
 
@@ -21,38 +21,29 @@ scm publish
 scm add user/button
 ```
 
-## Features
-
-- **Component Creation**: Generate components with interactive prompts
-- **Easy Publishing**: Publish components to the community registry
-- **Component Discovery**: Search and preview components before installing
-- **Fast Installation**: Install components with automatic dependency resolution
-- **Version Management**: Automatic versioning and updates
-- **Secure**: GitHub OAuth authentication, no secrets needed
-
 ## Commands
 
 ### Authentication
 
 ```bash
-scm login          # Authenticate with GitHub
+scm login          # Authenticate with GitHub OAuth
 scm logout         # Clear stored credentials
 ```
 
 ### Component Management
 
 ```bash
-scm create <name>  # Create a new component
-scm publish        # Publish component to registry
-scm add <name>     # Install a component
-scm update [name]  # Update installed components
+scm create <name>  # Create a new component with basic structure
+scm publish        # Publish component to registry with automatic versioning
+scm add <name>     # Install a component with dependency resolution
+scm update [name]  # Update installed components to latest versions
 ```
 
 ### Discovery
 
 ```bash
-scm search <term>  # Search for components
-scm preview <name> # Preview component details
+scm search <term>  # Search for components in registry
+scm preview <name> # Preview component details and documentation
 scm fork <name>    # Fork a component for customization
 ```
 
@@ -64,11 +55,9 @@ scm fork <name>    # Fork a component for customization
 # Create a new button component
 scm create my-button
 
-# Follow the prompts to configure:
-# - Component title and description
-# - Files to include
-# - Dependencies
-# - Categories
+# Generates:
+# - components/my-button/registry.json
+# - components/my-button/my-button.tsx
 ```
 
 ### Publishing Your Component
@@ -77,7 +66,7 @@ scm create my-button
 # From your component directory
 scm publish
 
-# Or skip confirmation prompts
+# Skip confirmation prompts
 scm publish --yes
 
 # With custom commit message
@@ -97,7 +86,7 @@ scm add user/button@1.0.0
 scm add user/button --force
 ```
 
-**Note**: If you try to install a component with a reserved name (like `button`, `card`, `dialog`, etc.), SCM will automatically redirect to use `shadcn add` instead. This ensures you get the official shadcn/ui component when available.
+**Note**: Reserved component names (like `button`, `card`, `dialog`) automatically redirect to `shadcn add` to ensure you get the official shadcn/ui component.
 
 ### Searching Components
 
@@ -112,6 +101,19 @@ scm search button --category ui
 scm search button --limit 5
 ```
 
+### Forking Components
+
+```bash
+# Fork a component
+scm fork user/button
+
+# Fork specific version
+scm fork user/button --version 1.0.0
+
+# Fork with custom name
+scm fork user/button --name my-button
+```
+
 ## Setup
 
 ### Authentication
@@ -121,23 +123,19 @@ scm login
 ```
 
 This will:
-
-1. Generate a GitHub OAuth URL
-2. Open your browser to authorize
-3. Ask you to paste the authorization code
-4. Store your access token securely
+1. Generate GitHub OAuth URL
+2. Open browser for authorization
+3. Store access token securely
 
 ## Reserved Component Names
 
-SCM automatically detects and handles reserved component names that conflict with official shadcn/ui components. These include:
+SCM automatically detects reserved component names that conflict with official shadcn/ui components:
 
-- **Core UI Components**: `button`, `card`, `dialog`, `input`, `form`, etc.
-- **Block Components**: `dashboard-01`, `sidebar-01`, `login-01`, etc.
-- **Chart Components**: `chart-area-default`, `chart-bar-default`, etc.
-- **Calendar Components**: `calendar-01`, `calendar-02`, etc.
-- **Theme Components**: `theme-daylight`, `theme-midnight`, etc.
-
-When you try to install a component with a reserved name, SCM will automatically redirect to use `shadcn add` instead, ensuring you get the official component.
+- Core UI: `button`, `card`, `dialog`, `input`, `form`, etc.
+- Blocks: `dashboard-01`, `sidebar-01`, `login-01`, etc.
+- Charts: `chart-area-default`, `chart-bar-default`, etc.
+- Calendar: `calendar-01`, `calendar-02`, etc.
+- Themes: `theme-daylight`, `theme-midnight`, etc.
 
 ## Component Structure
 
@@ -151,16 +149,6 @@ my-component/
 ├── styles.css       # Styles (optional)
 └── README.md        # Documentation (optional)
 ```
-
-### SCM Internal Files
-
-SCM automatically manages internal files in the package manager directory (`~/.scm/`):
-
-- **`~/.scm/version-hashes.json`**: Tracks file changes for automatic versioning
-- **`~/.scm/config.json`**: Stores authentication and configuration data
-- **`~/.scm/cache/`**: Caches registry metadata for faster operations
-
-These files are automatically created and managed by SCM. They should not be manually edited and are completely separate from your project files.
 
 ### registry.json Example
 
@@ -190,7 +178,7 @@ These files are automatically created and managed by SCM. They should not be man
 
 ## CSS Variables Support
 
-Components can include CSS variables that will be automatically applied:
+Components can include CSS variables that are automatically applied:
 
 ```json
 {
@@ -228,19 +216,11 @@ components/
 
 ## Contributing
 
-1. **Fork a component**: `scm fork user/component`
-2. **Make your changes**: Modify the component files
-3. **Publish your version**: `scm publish`
-4. **Submit PR**: Your component will be reviewed and merged
+1. Fork a component: `scm fork user/component`
+2. Make your changes: Modify the component files
+3. Publish your version: `scm publish`
+4. Submit PR: Your component will be reviewed and merged
 
 ## License
 
 MIT License - see LICENSE file for details.
-
-## Roadmap
-
-- [ ] Private registries
-- [ ] npm style marketplace
-- [ ] Interactive previews
-- [ ] Analytics and usage tracking
-- [ ] Multi-framework support
