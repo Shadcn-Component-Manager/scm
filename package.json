@@ -31,7 +31,7 @@
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "clean": "rimraf dist",
-    "prepublishOnly": "pnpm clean && pnpm build && pnpm format"
+    "prepublishOnly": "pnpm clean && pnpm build"
   },
   "keywords": [
     "shadcn",
