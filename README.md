@@ -1,8 +1,8 @@
 # Shadcn Component Manager (SCM)
 
-A powerful CLI tool for creating, sharing, and installing shadcn/ui components with ease. Build your component library and share it with the community!
+A powerful CLI tool for creating, sharing, and installing shadcn/ui components with ease. Build your component library and share it with the community.
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
 # Install globally
@@ -21,16 +21,16 @@ scm publish
 scm add user/button
 ```
 
-## ✨ Features
+## Features
 
-- **🔧 Component Creation**: Generate components with interactive prompts
-- **📦 Easy Publishing**: Publish components to the community registry
-- **🔍 Component Discovery**: Search and preview components before installing
-- **⚡ Fast Installation**: Install components with automatic dependency resolution
-- **🔄 Version Management**: Automatic versioning and updates
-- **🔒 Secure**: GitHub OAuth authentication, no secrets needed
+- **Component Creation**: Generate components with interactive prompts
+- **Easy Publishing**: Publish components to the community registry
+- **Component Discovery**: Search and preview components before installing
+- **Fast Installation**: Install components with automatic dependency resolution
+- **Version Management**: Automatic versioning and updates
+- **Secure**: GitHub OAuth authentication, no secrets needed
 
-## 📚 Commands
+## Commands
 
 ### Authentication
 
@@ -56,7 +56,7 @@ scm preview <name> # Preview component details
 scm fork <name>    # Fork a component for customization
 ```
 
-## 🎯 Usage Examples
+## Usage Examples
 
 ### Creating a Component
 
@@ -110,9 +110,9 @@ scm search button --category ui
 scm search button --limit 5
 ```
 
-## 🔧 Setup
+## Setup
 
-### 1. Authentication
+### Authentication
 
 ```bash
 scm login
@@ -125,7 +125,7 @@ This will:
 3. Ask you to paste the authorization code
 4. Store your access token securely
 
-## 📁 Component Structure
+## Component Structure
 
 Your component should have this structure:
 
@@ -173,7 +173,7 @@ These files are automatically created and managed by SCM. They should not be man
 }
 ```
 
-## 🎨 CSS Variables Support
+## CSS Variables Support
 
 Components can include CSS variables that will be automatically applied:
 
@@ -193,7 +193,7 @@ Components can include CSS variables that will be automatically applied:
 }
 ```
 
-## 🔍 Registry Structure
+## Registry Structure
 
 The community registry follows this structure:
 
@@ -211,18 +211,18 @@ components/
     └── ...
 ```
 
-## 🤝 Contributing
+## Contributing
 
 1. **Fork a component**: `scm fork user/component`
 2. **Make your changes**: Modify the component files
 3. **Publish your version**: `scm publish`
 4. **Submit PR**: Your component will be reviewed and merged
 
-## 📄 License
+## License
 
 MIT License - see LICENSE file for details.
 
-## 🔮 Roadmap
+## Roadmap
 
 - [ ] Private registries
 - [ ] npm style marketplace

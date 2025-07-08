@@ -1,7 +1,7 @@
 {
   "name": "@shadcn-component-manager/scm",
   "description": "Shadcn Component Manager (SCM) is a open-source CLI tool and registry ecosystem designed to extend shadcn's component model, enabling developers to create, share, and install UI components with ease.",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "author": "BankkRoll <https://github.com/BankkRoll>",
   "license": "MIT",
   "private": false,
