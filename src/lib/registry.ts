@@ -195,8 +195,8 @@ export async function resolveComponentVersion(
     const component = (index as any[]).find(
       (item) => item.name === componentName,
     );
-    if (component?.latestVersion) {
-      return component.latestVersion;
+    if (component?.version) {
+      return component.version;
     }
   } catch (error) {
     // Fall through to returning "latest"

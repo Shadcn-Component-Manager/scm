@@ -371,8 +371,8 @@ async function getLatestVersion(
       (item: any) => item.name === `${namespace}/${name}`,
     );
 
-    if (component?.latestVersion) {
-      return component.latestVersion;
+    if (component?.version) {
+      return component.version;
     }
 
     const componentUrl = getComponentRegistryUrl(namespace, name, "latest");
