@@ -2,9 +2,11 @@ import axios from "axios";
 import chalk from "chalk";
 import { Command } from "commander";
 import fs from "fs-extra";
+import inquirer from "inquirer";
 import ora from "ora";
 import path from "path";
-import { REGISTRY_URL } from "../lib/constants.js";
+import { REGISTRY_INDEX_URL } from "../lib/constants.js";
+import { getComponentRegistryUrl } from "../lib/registry.js";
 import { isVersionGreater } from "../lib/versioning.js";
 
 /**
@@ -19,6 +21,14 @@ export const update = new Command()
   )
   .option("-f, --force", "Force update even if no newer version is available")
   .option("-d, --dry-run", "Show what would be updated without making changes")
+  .option(
+    "-v, --version <version>",
+    "Update to specific version (instead of latest)",
+  )
+  .option("-a, --all", "Update all components (explicit flag)")
+  .option("-s, --skip-deps", "Skip updating dependencies")
+  .option("-c, --check-only", "Only check for updates, don't install")
+  .option("-i, --interactive", "Interactive mode for each component")
   .action(async (componentName, options) => {
     const CWD = process.cwd();
 
@@ -31,9 +41,6 @@ export const update = new Command()
 
 /**
  * Updates a specific component
- * @param componentName - Name of the component to update
- * @param cwd - Current working directory
- * @param options - Command options
  */
 async function updateComponent(
   componentName: string,
@@ -55,12 +62,17 @@ async function updateComponent(
   try {
     const currentVersion = await getCurrentVersion(componentName, cwd);
 
-    const latestVersion = await getLatestVersion(namespace, name);
+    let targetVersion: string | null;
+    if (options.version) {
+      targetVersion = options.version;
+    } else {
+      targetVersion = await getLatestVersion(namespace, name);
+    }
 
-    if (!latestVersion) {
+    if (!targetVersion) {
       spinner.fail(
         chalk.red(
-          `❌ Could not find latest version for ${chalk.cyan(componentName)}`,
+          `❌ Could not find ${options.version ? "specified" : "latest"} version for ${chalk.cyan(componentName)}`,
         ),
       );
       process.exit(1);
@@ -75,30 +87,94 @@ async function updateComponent(
       process.exit(1);
     }
 
-    if (isVersionGreater(latestVersion, currentVersion)) {
-      spinner.succeed(
-        chalk.green(
-          `📈 Update available: ${currentVersion} → ${latestVersion}`,
-        ),
-      );
+    if (options.checkOnly) {
+      if (isVersionGreater(targetVersion, currentVersion)) {
+        spinner.succeed(
+          chalk.green(
+            `📈 Update available: ${currentVersion} → ${targetVersion}`,
+          ),
+        );
+      } else if (options.version) {
+        spinner.succeed(
+          chalk.yellow(
+            `🔄 Would update to specified version: ${currentVersion} → ${targetVersion}`,
+          ),
+        );
+      } else {
+        spinner.succeed(
+          chalk.green(
+            `✅ ${chalk.cyan(componentName)} is already up to date (${currentVersion})`,
+          ),
+        );
+      }
+      return;
+    }
+
+    const shouldUpdate =
+      isVersionGreater(targetVersion, currentVersion) ||
+      options.force ||
+      options.version;
+
+    if (shouldUpdate) {
+      if (isVersionGreater(targetVersion, currentVersion)) {
+        spinner.succeed(
+          chalk.green(
+            `📈 Update available: ${currentVersion} → ${targetVersion}`,
+          ),
+        );
+      } else if (options.version) {
+        spinner.succeed(
+          chalk.yellow(
+            `🔄 Updating to specified version: ${currentVersion} → ${targetVersion}`,
+          ),
+        );
+      } else {
+        spinner.succeed(
+          chalk.yellow(
+            `🔄 Forcing update of ${chalk.cyan(componentName)} (no newer version available)`,
+          ),
+        );
+      }
 
       if (options.dryRun) {
         console.log(
           chalk.yellow(
-            `Would update ${chalk.cyan(componentName)} from ${currentVersion} to ${latestVersion}`,
+            `Would update ${chalk.cyan(componentName)} from ${currentVersion} to ${targetVersion}`,
           ),
         );
         return;
+      }
+
+      if (options.interactive) {
+        const { confirm } = await inquirer.prompt([
+          {
+            type: "confirm",
+            name: "confirm",
+            message: `Update ${componentName} from ${currentVersion} to ${targetVersion}?`,
+            default: true,
+          },
+        ] as any);
+
+        if (!confirm) {
+          spinner.fail(chalk.yellow("❌ Update cancelled"));
+          return;
+        }
       }
 
       const updateSpinner = ora(
         `🔄 Updating ${chalk.cyan(componentName)}...`,
       ).start();
       try {
-        await performUpdate(componentName, currentVersion, latestVersion, cwd);
+        await performUpdate(
+          componentName,
+          currentVersion,
+          targetVersion,
+          cwd,
+          options,
+        );
         updateSpinner.succeed(
           chalk.green(
-            `✅ Successfully updated ${chalk.cyan(componentName)} to ${latestVersion}`,
+            `✅ Successfully updated ${chalk.cyan(componentName)} to ${targetVersion}`,
           ),
         );
       } catch (error) {
@@ -109,19 +185,11 @@ async function updateComponent(
         process.exit(1);
       }
     } else {
-      if (options.force) {
-        spinner.succeed(
-          chalk.yellow(
-            `🔄 Forcing update of ${chalk.cyan(componentName)} (no newer version available)`,
-          ),
-        );
-      } else {
-        spinner.succeed(
-          chalk.green(
-            `✅ ${chalk.cyan(componentName)} is already up to date (${currentVersion})`,
-          ),
-        );
-      }
+      spinner.succeed(
+        chalk.green(
+          `✅ ${chalk.cyan(componentName)} is already up to date (${currentVersion})`,
+        ),
+      );
     }
   } catch (error) {
     spinner.fail(
@@ -134,8 +202,6 @@ async function updateComponent(
 
 /**
  * Updates all installed components
- * @param cwd - Current working directory
- * @param options - Command options
  */
 async function updateAllComponents(cwd: string, options: any) {
   const spinner = ora("🔍 Checking for component updates...").start();
@@ -164,9 +230,18 @@ async function updateAllComponents(cwd: string, options: any) {
       try {
         const [namespace, name] = component.name.split("/");
         const currentVersion = component.version;
-        const latestVersion = await getLatestVersion(namespace, name);
+        let latestVersion: string | null;
 
-        if (latestVersion && isVersionGreater(latestVersion, currentVersion)) {
+        if (options.version) {
+          latestVersion = options.version;
+        } else {
+          latestVersion = await getLatestVersion(namespace, name);
+        }
+
+        if (
+          latestVersion &&
+          (isVersionGreater(latestVersion, currentVersion) || options.version)
+        ) {
           updates.push({
             component: component.name,
             current: currentVersion,
@@ -194,26 +269,66 @@ async function updateAllComponents(cwd: string, options: any) {
       );
     });
 
+    if (options.checkOnly) {
+      console.log(chalk.yellow("\nCheck-only mode - no updates performed"));
+      return;
+    }
+
     if (options.dryRun) {
       console.log(chalk.yellow("\nDry run - no changes made"));
       return;
     }
 
-    for (const update of updates) {
-      try {
-        await performUpdate(
-          update.component,
-          update.current,
-          update.latest,
-          cwd,
-        );
-        console.log(
-          chalk.green(`✅ Updated ${update.component} to ${update.latest}`),
-        );
-      } catch (error) {
-        console.error(
-          chalk.red(`❌ Failed to update ${update.component}: ${error}`),
-        );
+    if (options.interactive) {
+      for (const update of updates) {
+        const { confirm } = await inquirer.prompt([
+          {
+            type: "confirm",
+            name: "confirm",
+            message: `Update ${update.component} from ${update.current} to ${update.latest}?`,
+            default: true,
+          },
+        ] as any);
+
+        if (confirm) {
+          try {
+            await performUpdate(
+              update.component,
+              update.current,
+              update.latest,
+              cwd,
+              options,
+            );
+            console.log(
+              chalk.green(`✅ Updated ${update.component} to ${update.latest}`),
+            );
+          } catch (error) {
+            console.error(
+              chalk.red(`❌ Failed to update ${update.component}: ${error}`),
+            );
+          }
+        } else {
+          console.log(chalk.yellow(`⏭️  Skipped ${update.component}`));
+        }
+      }
+    } else {
+      for (const update of updates) {
+        try {
+          await performUpdate(
+            update.component,
+            update.current,
+            update.latest,
+            cwd,
+            options,
+          );
+          console.log(
+            chalk.green(`✅ Updated ${update.component} to ${update.latest}`),
+          );
+        } catch (error) {
+          console.error(
+            chalk.red(`❌ Failed to update ${update.component}: ${error}`),
+          );
+        }
       }
     }
   } catch (error) {
@@ -225,9 +340,6 @@ async function updateAllComponents(cwd: string, options: any) {
 
 /**
  * Gets the current version of an installed component
- * @param componentName - Name of the component
- * @param cwd - Current working directory
- * @returns Promise resolving to current version or null
  */
 async function getCurrentVersion(
   componentName: string,
@@ -247,17 +359,13 @@ async function getCurrentVersion(
 
 /**
  * Gets the latest version of a component from the registry
- * @param namespace - Component namespace
- * @param name - Component name
- * @returns Promise resolving to latest version or null
  */
 async function getLatestVersion(
   namespace: string,
   name: string,
 ): Promise<string | null> {
   try {
-    const indexUrl = `${REGISTRY_URL.replace("/components", "")}/registry.json`;
-    const { data: index } = await axios.get(indexUrl);
+    const { data: index } = await axios.get(REGISTRY_INDEX_URL);
 
     const component = index.find(
       (item: any) => item.name === `${namespace}/${name}`,
@@ -267,7 +375,7 @@ async function getLatestVersion(
       return component.latestVersion;
     }
 
-    const componentUrl = `${REGISTRY_URL}/${namespace}/${name}/latest/registry.json`;
+    const componentUrl = getComponentRegistryUrl(namespace, name, "latest");
     const { data: registryItem } = await axios.get(componentUrl);
 
     return registryItem.version || null;
@@ -278,25 +386,24 @@ async function getLatestVersion(
 
 /**
  * Performs the actual update operation
- * @param componentName - Name of the component to update
- * @param currentVersion - Current version
- * @param newVersion - New version to install
- * @param cwd - Current working directory
  */
 async function performUpdate(
   componentName: string,
   currentVersion: string,
   newVersion: string,
   cwd: string,
+  options: any,
 ) {
   const { execSync } = await import("child_process");
-  execSync(`scm add ${componentName}@${newVersion}`, { stdio: "inherit", cwd });
+  const skipDepsFlag = options.skipDeps ? " --skip-deps" : "";
+  execSync(`scm add ${componentName}@${newVersion}${skipDepsFlag}`, {
+    stdio: "inherit",
+    cwd,
+  });
 }
 
 /**
  * Gets all installed components
- * @param cwd - Current working directory
- * @returns Promise resolving to array of installed components
  */
 async function getInstalledComponents(
   cwd: string,

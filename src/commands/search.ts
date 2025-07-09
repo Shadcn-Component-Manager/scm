@@ -14,6 +14,8 @@ const registryIndexItemSchema = z.object({
   description: z.string(),
   author: z.string(),
   categories: z.array(z.string()).optional(),
+  type: z.string().optional(),
+  publishedAt: z.string().optional(),
 });
 
 const registryIndexSchema = z.array(registryIndexItemSchema);
@@ -28,8 +30,23 @@ export const search = new Command()
   .option("-f, --force", "Force refresh cache")
   .option("-c, --category <category>", "Filter by category")
   .option("-l, --limit <number>", "Limit results", "10")
+  .option("-a, --author <author>", "Filter by author")
+  .option(
+    "-s, --sort <field>",
+    "Sort by (name, author, date, popularity)",
+    "name",
+  )
+  .option("-o, --output <format>", "Output format (table, json, csv)", "table")
+  .option(
+    "-t, --type <type>",
+    "Filter by component type (ui, hook, theme, etc.)",
+  )
+  .option("-v, --verbose", "Show detailed information")
+  .option("-q, --quiet", "Minimal output")
   .action(async (keyword, options) => {
-    const fetchSpinner = ora("🔍 Searching registry...").start();
+    const fetchSpinner = options.quiet
+      ? null
+      : ora("🔍 Searching registry...").start();
 
     try {
       let registryIndex: any[];
@@ -37,36 +54,48 @@ export const search = new Command()
       if (!options.force) {
         const cached = await getCachedRegistryIndex();
         if (cached) {
-          fetchSpinner.succeed(chalk.green("✅ Using cached registry data"));
+          if (!options.quiet) {
+            fetchSpinner?.succeed(chalk.green("✅ Using cached registry data"));
+          }
           registryIndex = cached;
         } else {
-          fetchSpinner.text = "📥 Fetching from registry...";
+          if (!options.quiet) {
+            fetchSpinner!.text = "📥 Fetching from registry...";
+          }
           const { data } = await axios.get(REGISTRY_INDEX_URL);
           registryIndex = data;
           await setCachedRegistryIndex(data);
-          fetchSpinner.succeed(
-            chalk.green("✅ Registry data fetched and cached"),
-          );
+          if (!options.quiet) {
+            fetchSpinner?.succeed(
+              chalk.green("✅ Registry data fetched and cached"),
+            );
+          }
         }
       } else {
-        fetchSpinner.text = "🔄 Force refreshing registry data...";
+        if (!options.quiet) {
+          fetchSpinner!.text = "🔄 Force refreshing registry data...";
+        }
         const { data } = await axios.get(REGISTRY_INDEX_URL);
         registryIndex = data;
         await setCachedRegistryIndex(data);
-        fetchSpinner.succeed(
-          chalk.green("✅ Registry data refreshed and cached"),
-        );
+        if (!options.quiet) {
+          fetchSpinner?.succeed(
+            chalk.green("✅ Registry data refreshed and cached"),
+          );
+        }
       }
 
       const validation = registryIndexSchema.safeParse(registryIndex);
 
       if (!validation.success) {
-        fetchSpinner.fail(
-          chalk.red(
-            "❌ Failed to parse registry index. Registry might be malformed",
-          ),
-        );
-        console.error(validation.error.issues);
+        if (!options.quiet) {
+          fetchSpinner?.fail(
+            chalk.red(
+              "❌ Failed to parse registry index. Registry might be malformed",
+            ),
+          );
+          console.error(validation.error.issues);
+        }
         process.exit(1);
       }
 
@@ -86,34 +115,87 @@ export const search = new Command()
         );
       }
 
+      if (options.author) {
+        searchResults = searchResults.filter((item) =>
+          item.author.toLowerCase().includes(options.author.toLowerCase()),
+        );
+      }
+
+      if (options.type) {
+        searchResults = searchResults.filter(
+          (item) =>
+            item.type &&
+            item.type.toLowerCase().includes(options.type.toLowerCase()),
+        );
+      }
+
       const limit = parseInt(options.limit);
       searchResults = searchResults.slice(0, limit);
 
-      console.log(
-        chalk.green(`✅ Found ${searchResults.length} matching components`),
-      );
+      if (!options.quiet) {
+        console.log(
+          chalk.green(`✅ Found ${searchResults.length} matching components`),
+        );
+      }
 
       if (searchResults.length > 0) {
-        console.log("");
-        searchResults.forEach((item, index) => {
-          console.log(
-            `  ${index + 1}. ${chalk.cyan(item.name)} by ${chalk.yellow(item.author)}`,
-          );
-          console.log(`     ${item.description}`);
-          if (item.categories && item.categories.length > 0) {
+        if (options.output === "json") {
+          console.log(JSON.stringify(searchResults, null, 2));
+        } else if (options.output === "csv") {
+          console.log("name,author,description,categories,type,publishedAt");
+          searchResults.forEach((item) => {
+            const categories = item.categories?.join(";") || "";
+            const type = item.type || "";
+            const publishedAt = item.publishedAt || "";
             console.log(
-              `     Categories: ${chalk.gray(item.categories.join(", "))}`,
+              `"${item.name}","${item.author}","${item.description}","${categories}","${type}","${publishedAt}"`,
             );
+          });
+        } else {
+          if (!options.quiet) {
+            console.log("");
           }
-          console.log("");
-        });
+          searchResults.forEach((item, index) => {
+            if (options.verbose) {
+              console.log(
+                `  ${index + 1}. ${chalk.cyan(item.name)} by ${chalk.yellow(item.author)}`,
+              );
+              console.log(`     ${item.description}`);
+              if (item.categories && item.categories.length > 0) {
+                console.log(
+                  `     Categories: ${chalk.gray(item.categories.join(", "))}`,
+                );
+              }
+              if (item.type) {
+                console.log(`     Type: ${chalk.gray(item.type)}`);
+              }
+              if (item.publishedAt) {
+                console.log(`     Published: ${chalk.gray(item.publishedAt)}`);
+              }
+              console.log("");
+            } else {
+              console.log(
+                `  ${index + 1}. ${chalk.cyan(item.name)} by ${chalk.yellow(item.author)}`,
+              );
+              console.log(`     ${item.description}`);
+              if (item.categories && item.categories.length > 0) {
+                console.log(
+                  `     Categories: ${chalk.gray(item.categories.join(", "))}`,
+                );
+              }
+              console.log("");
+            }
+          });
+        }
       }
     } catch (error) {
-      fetchSpinner.fail(chalk.red("❌ Failed to fetch registry index"));
-      if (axios.isAxiosError(error) && error.response?.status === 404) {
-        console.error(chalk.red("Registry index not found"));
-      } else {
-        console.error(error);
+      if (!options.quiet) {
+        fetchSpinner?.fail(chalk.red("❌ Failed to fetch registry index"));
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+          console.error(chalk.red("Registry index not found"));
+        } else {
+          console.error(error);
+        }
       }
       process.exit(1);
     }

@@ -1,4 +1,3 @@
-// Registry configuration
 export const REGISTRY_OWNER = "Shadcn-Component-Manager";
 export const REGISTRY_REPO = "registry";
 export const REGISTRY_BASE_BRANCH = "main";
@@ -7,21 +6,13 @@ export const REGISTRY_URL =
 export const REGISTRY_INDEX_URL =
   "https://raw.githubusercontent.com/Shadcn-Component-Manager/registry/main/registry.json";
 
-// Shadcn/ui registry configuration
-export const SHADCN_REGISTRY_URL =
-  "https://raw.githubusercontent.com/shadcn-ui/ui/main/apps/v4";
-export const SHADCN_REGISTRY_INDEX_URL =
-  "https://raw.githubusercontent.com/shadcn-ui/ui/main/apps/v4/registry.json";
-
-// GitHub OAuth configuration
 export const GITHUB_CLIENT_ID = "Ov23li0QT1pkOUZbSQiY";
 export const GITHUB_SCOPES = ["repo", "read:user", "user:email"];
 
-// Cache configuration
 export const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
- * Reserved component names (shadcn/ui internal components)
+ * Reserved component names
  */
 export const RESERVED_COMPONENT_NAMES = [
   // Core UI Components
@@ -107,6 +98,8 @@ export const RESERVED_COMPONENT_NAMES = [
   "login-03",
   "login-04",
   "login-05",
+
+  // Calendar components
   "calendar-01",
   "calendar-02",
   "calendar-03",

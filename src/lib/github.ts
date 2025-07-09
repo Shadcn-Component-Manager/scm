@@ -14,8 +14,6 @@ let octokit: Octokit | null = null;
 
 /**
  * Gets or creates an Octokit instance for GitHub API access
- * @returns Promise resolving to Octokit instance
- * @throws Error if user is not authenticated
  */
 export async function getOctokit(): Promise<Octokit> {
   if (octokit) {
@@ -33,7 +31,6 @@ export async function getOctokit(): Promise<Octokit> {
 
 /**
  * Gets the authenticated GitHub user information
- * @returns Promise resolving to user data
  */
 export async function getGitHubUser() {
   try {
@@ -69,7 +66,6 @@ export async function getGitHubUser() {
 
 /**
  * Authenticates with GitHub using OAuth device flow
- * @returns Promise resolving to access token
  */
 export async function authenticateWithGitHub(): Promise<string> {
   const spinner = ora("🔐 Starting GitHub OAuth device flow...").start();
@@ -153,10 +149,6 @@ export async function authenticateWithGitHub(): Promise<string> {
 
 /**
  * Polls GitHub for authorization completion
- * @param deviceCode - Device verification code
- * @param interval - Minimum polling interval in seconds
- * @param expiresIn - Expiration time in seconds
- * @returns Promise resolving to access token
  */
 async function pollForAuthorization(
   deviceCode: string,
@@ -242,8 +234,6 @@ async function pollForAuthorization(
 
 /**
  * Validates a GitHub access token
- * @param token - Access token to validate
- * @returns Promise resolving to validation result
  */
 export async function validateToken(token: string): Promise<boolean> {
   try {
@@ -267,13 +257,6 @@ export async function logout(): Promise<void> {
 
 /**
  * Creates a pull request on GitHub
- * @param owner - Repository owner
- * @param repo - Repository name
- * @param title - PR title
- * @param body - PR body
- * @param head - Source branch
- * @param base - Target branch
- * @returns Promise resolving to PR data
  */
 export async function createPullRequest(
   owner: string,
@@ -297,11 +280,6 @@ export async function createPullRequest(
 
 /**
  * Creates a new branch on GitHub
- * @param owner - Repository owner
- * @param repo - Repository name
- * @param branch - Branch name
- * @param sha - Commit SHA to base branch on
- * @returns Promise resolving to ref data
  */
 export async function createBranch(
   owner: string,
@@ -321,14 +299,6 @@ export async function createBranch(
 
 /**
  * Creates or updates a file in a GitHub repository
- * @param owner - Repository owner
- * @param repo - Repository name
- * @param path - File path in repository
- * @param message - Commit message
- * @param content - File content
- * @param branch - Target branch
- * @param sha - Current file SHA (for updates)
- * @returns Promise resolving to file data
  */
 export async function createOrUpdateFile(
   owner: string,
@@ -358,9 +328,6 @@ export async function createOrUpdateFile(
 
 /**
  * Gets repository information
- * @param owner - Repository owner
- * @param repo - Repository name
- * @returns Promise resolving to repository data
  */
 export async function getRepository(owner: string, repo: string) {
   const kit = await getOctokit();
@@ -373,7 +340,6 @@ export async function getRepository(owner: string, repo: string) {
 
 /**
  * Gets the SHA of the main branch
- * @returns Promise resolving to commit SHA
  */
 export async function getMainBranchSha() {
   try {
@@ -385,17 +351,12 @@ export async function getMainBranchSha() {
     });
     return branch.commit.sha;
   } catch (error) {
-    // Authentication errors will be handled by getGitHubUser() which is called first
-    // Other errors should be re-thrown
     throw error;
   }
 }
 
 /**
  * Gets the latest version of a component from the remote registry
- * @param username - GitHub username of the component author
- * @param componentName - Name of the component
- * @returns Promise resolving to latest version string or null if not found
  */
 export async function getLatestComponentVersion(
   username: string,
@@ -436,8 +397,6 @@ export async function getLatestComponentVersion(
 
     return sortedVersions[0];
   } catch (error) {
-    // If the component doesn't exist or there's an error, return null
-    // This includes authentication errors - we'll handle those in the calling function
     return null;
   }
 }

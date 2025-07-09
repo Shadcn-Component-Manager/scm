@@ -1,4 +1,6 @@
+import axios from "axios";
 import { z } from "zod";
+import { REGISTRY_INDEX_URL, REGISTRY_URL } from "./constants.js";
 
 /**
  * Schema for a single file in the registry
@@ -175,3 +177,64 @@ export const registrySchema = z.object({
 export type RegistryItem = z.infer<typeof registryItemSchema>;
 export type Registry = z.infer<typeof registrySchema>;
 export type RegistryItemFile = z.infer<typeof registryItemFileSchema>;
+
+/**
+ * Resolves the version of a component.
+ * If the version is "latest", it will try to resolve it from the registry index.
+ */
+export async function resolveComponentVersion(
+  componentName: string,
+  version: string,
+): Promise<string> {
+  if (version !== "latest") {
+    return version;
+  }
+
+  try {
+    const { data: index } = await axios.get(REGISTRY_INDEX_URL);
+    const component = (index as any[]).find(
+      (item) => item.name === componentName,
+    );
+    if (component?.latestVersion) {
+      return component.latestVersion;
+    }
+  } catch (error) {
+    // Fall through to returning "latest"
+  }
+
+  return "latest";
+}
+
+/**
+ * Constructs the URL for a component's registry.json file
+ */
+export function getComponentRegistryUrl(
+  namespace: string,
+  name: string,
+  version: string,
+): string {
+  return `${REGISTRY_URL}/${namespace}/${name}/${version}/registry.json`;
+}
+
+/**
+ * Constructs the URL for a component's README.md file
+ */
+export function getComponentReadmeUrl(
+  namespace: string,
+  name: string,
+  version: string,
+): string {
+  return `${REGISTRY_URL}/${namespace}/${name}/${version}/README.md`;
+}
+
+/**
+ * Constructs the URL for a component file
+ */
+export function getComponentFileUrl(
+  namespace: string,
+  name: string,
+  version: string,
+  filePath: string,
+): string {
+  return `${REGISTRY_URL}/${namespace}/${name}/${version}/${filePath}`;
+}

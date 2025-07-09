@@ -33,6 +33,10 @@ export const publish = new Command()
     "-i, --item <item>",
     "Specific item to publish from registry collection",
   )
+  .option(
+    "-v, --version <version>",
+    "Specify version manually (override auto-detection)",
+  )
   .action(async (options) => {
     const CWD = process.cwd();
     const registryJsonPath = path.join(CWD, "registry.json");
@@ -171,32 +175,46 @@ export const publish = new Command()
 
       const baseVersion = latestRemoteVersion || localVersion;
 
-      const versionInfo = await detectVersionChanges(CWD, baseVersion);
-
-      if (versionInfo.hasChanges) {
+      let versionInfo;
+      if (options.version) {
+        versionInfo = {
+          currentVersion: baseVersion,
+          newVersion: options.version,
+          changeType: "manual" as const,
+          hasChanges: true,
+        };
         spinner.succeed(
           chalk.green(
-            `📈 Version change: ${versionInfo.currentVersion} → ${versionInfo.newVersion}`,
+            `📈 Manual version specified: ${versionInfo.currentVersion} → ${versionInfo.newVersion}`,
           ),
         );
-
-        if (!options.yes) {
-          const { confirm } = await inquirer.prompt([
-            {
-              type: "confirm",
-              name: "confirm",
-              message: `Publish ${componentName} as version ${versionInfo.newVersion}?`,
-              default: true,
-            },
-          ] as any);
-
-          if (!confirm) {
-            spinner.fail(chalk.yellow("❌ Publish cancelled"));
-            process.exit(0);
-          }
-        }
       } else {
-        spinner.succeed(chalk.green("✅ No version changes detected"));
+        versionInfo = await detectVersionChanges(CWD, baseVersion);
+        if (versionInfo.hasChanges) {
+          spinner.succeed(
+            chalk.green(
+              `📈 Version change: ${versionInfo.currentVersion} → ${versionInfo.newVersion}`,
+            ),
+          );
+        } else {
+          spinner.succeed(chalk.green("✅ No version changes detected"));
+        }
+      }
+
+      if (versionInfo.hasChanges && !options.yes) {
+        const { confirm } = await inquirer.prompt([
+          {
+            type: "confirm",
+            name: "confirm",
+            message: `Publish ${componentName} as version ${versionInfo.newVersion}?`,
+            default: true,
+          },
+        ] as any);
+
+        if (!confirm) {
+          spinner.fail(chalk.yellow("❌ Publish cancelled"));
+          process.exit(0);
+        }
       }
 
       spinner.text = "🔧 Preparing for publish...";

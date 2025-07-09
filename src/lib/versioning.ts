@@ -15,9 +15,6 @@ export interface VersionInfo {
 
 /**
  * Detects version changes by analyzing file modifications
- * @param componentPath - Path to the component directory
- * @param currentVersion - Current version string
- * @returns Promise resolving to version information
  */
 export async function detectVersionChanges(
   componentPath: string,
@@ -123,8 +120,6 @@ export async function detectVersionChanges(
 
 /**
  * Recursively gets all relevant files in a directory
- * @param dir - Directory to scan
- * @returns Promise resolving to array of file paths
  */
 async function getAllFiles(dir: string): Promise<string[]> {
   const files: string[] = [];
@@ -159,10 +154,6 @@ async function getAllFiles(dir: string): Promise<string[]> {
 
 /**
  * Determines the type of version change based on file modifications
- * @param changedFiles - Array of changed file paths
- * @param newFiles - Array of new file paths
- * @param deletedFiles - Array of deleted file paths
- * @returns Change type (patch, minor, or major)
  */
 function determineChangeType(
   changedFiles: string[],
@@ -192,8 +183,6 @@ function determineChangeType(
 
 /**
  * Validates if a version string is valid semver
- * @param version - Version string to validate
- * @returns True if valid, false otherwise
  */
 export function validateVersion(version: string): boolean {
   return semver.valid(version) !== null;
@@ -201,9 +190,6 @@ export function validateVersion(version: string): boolean {
 
 /**
  * Compares two version strings
- * @param v1 - First version string
- * @param v2 - Second version string
- * @returns Comparison result (-1, 0, 1)
  */
 export function compareVersions(v1: string, v2: string): number {
   return semver.compare(v1, v2);
@@ -211,9 +197,6 @@ export function compareVersions(v1: string, v2: string): number {
 
 /**
  * Checks if version v1 is greater than v2
- * @param v1 - First version string
- * @param v2 - Second version string
- * @returns True if v1 > v2, false otherwise
  */
 export function isVersionGreater(v1: string, v2: string): boolean {
   return semver.gt(v1, v2);

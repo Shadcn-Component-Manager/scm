@@ -15,8 +15,39 @@ const configSchema = z.object({
 export type Config = z.infer<typeof configSchema>;
 
 /**
+ * Reads a package.json file and returns its contents (synchronous)
+ */
+export function readPackageJsonSync(packagePath: string): any | null {
+  try {
+    if (fs.existsSync(packagePath)) {
+      const content = fs.readFileSync(packagePath, "utf-8");
+      return JSON.parse(content);
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * Reads a package.json file and returns its contents
+ */
+export async function readPackageJson(
+  packagePath: string,
+): Promise<any | null> {
+  try {
+    if (await fs.pathExists(packagePath)) {
+      const content = await fs.readFile(packagePath, "utf-8");
+      return JSON.parse(content);
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
  * Reads the SCM configuration file
- * @returns Promise resolving to the configuration object
  */
 export async function readConfig(): Promise<Config> {
   const spinner = ora("📖 Reading configuration...").start();
@@ -45,7 +76,6 @@ export async function readConfig(): Promise<Config> {
 
 /**
  * Writes the SCM configuration to file
- * @param config - Configuration object to save
  */
 export async function writeConfig(config: Config): Promise<void> {
   const spinner = ora("💾 Saving configuration...").start();

@@ -6,9 +6,6 @@ import { RegistryItem, registryItemSchema } from "./registry.js";
 
 /**
  * Validates a component's files and structure
- * @param componentPath - Path to the component directory
- * @param registryItem - Optional registry item to validate against
- * @returns Promise resolving to validation result
  */
 export async function validateComponent(
   componentPath: string,
@@ -73,8 +70,6 @@ export async function validateComponent(
 
 /**
  * Validates a registry item object
- * @param registryItem - Registry item to validate
- * @returns Promise resolving to validation result
  */
 export async function validateRegistryItem(
   registryItem: any,
@@ -100,8 +95,6 @@ export async function validateRegistryItem(
 
 /**
  * Validates a registry.json file
- * @param registryPath - Path to the registry.json file
- * @returns Promise resolving to validation result
  */
 export async function validateRegistryJson(
   registryPath: string,

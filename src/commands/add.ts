@@ -5,16 +5,26 @@ import fs from "fs-extra";
 import ora from "ora";
 import path from "path";
 import { getCachedComponent, setCachedComponent } from "../lib/cache.js";
-import { REGISTRY_URL, isReservedComponentName } from "../lib/constants.js";
+import { isReservedComponentName } from "../lib/constants.js";
+import {
+  getComponentFileUrl,
+  getComponentRegistryUrl,
+  resolveComponentVersion,
+} from "../lib/registry.js";
 
 /**
- * Command to add a component to the current project
+ * Command to add a component to the current project.
  */
 export const add = new Command()
   .name("add")
   .description("Add a component to your project")
   .argument("<component-name>", "Component name (e.g., user/button[@1.0.0])")
   .option("-f, --force", "Force refresh cache")
+  .option("-d, --dry-run", "Show what would be installed without installing")
+  .option("-p, --path <path>", "Custom installation path")
+  .option("-s, --skip-deps", "Skip installing dependencies")
+  .option("-v, --verbose", "Show detailed installation info")
+  .option("-y, --yes", "Skip confirmation prompts")
   .action(async (componentName, options) => {
     const versionMatch = componentName.match(/^(.+?)@(.+)$/);
     const componentWithoutVersion = versionMatch
@@ -32,12 +42,16 @@ export const add = new Command()
       process.exit(1);
     }
 
-    // Check if this is a reserved component name
     if (isReservedComponentName(name)) {
       console.log(
         chalk.yellow(`⚠️  "${name}" is a reserved shadcn/ui component name`),
       );
       console.log(chalk.blue(`🔄 Redirecting to shadcn add ${name}...`));
+
+      if (options.dryRun) {
+        console.log(chalk.cyan(`Would run: npx shadcn@latest add ${name}`));
+        return;
+      }
 
       try {
         const { execSync } = await import("child_process");
@@ -82,55 +96,191 @@ export const add = new Command()
       process.exit(1);
     }
 
-    const componentUrl = `${REGISTRY_URL}/${namespace}/${name}/${version}/registry.json`;
-    const spinner = ora(`📦 Fetching ${chalk.cyan(componentName)}...`).start();
+    const resolvedVersion = await resolveComponentVersion(
+      componentWithoutVersion,
+      version,
+    );
+    const componentIdWithVersion = `${componentWithoutVersion}@${resolvedVersion}`;
+
+    const componentUrl = getComponentRegistryUrl(
+      namespace,
+      name,
+      resolvedVersion,
+    );
+
+    const spinner = options.verbose
+      ? null
+      : ora(`📦 Fetching ${chalk.cyan(componentIdWithVersion)}...`).start();
 
     try {
       let registryItem: any;
 
-      const cacheKey = `${namespace}-${name}-${version}`;
+      const cacheKey = `${namespace}-${name}-${resolvedVersion}`;
       if (!options.force) {
         const cached = await getCachedComponent(namespace, name);
         if (cached) {
-          spinner.succeed(
-            chalk.green(
-              `✅ Using cached data for ${chalk.cyan(componentName)}`,
-            ),
-          );
+          if (options.verbose) {
+            console.log(
+              chalk.green(
+                `✅ Using cached data for ${chalk.cyan(componentIdWithVersion)}`,
+              ),
+            );
+          } else {
+            spinner?.succeed(
+              chalk.green(
+                `✅ Using cached data for ${chalk.cyan(componentIdWithVersion)}`,
+              ),
+            );
+          }
           registryItem = cached;
         } else {
+          if (options.verbose) {
+            console.log(
+              chalk.blue(`📥 Fetching from registry: ${componentUrl}`),
+            );
+          }
           const { data } = await axios.get(componentUrl);
           registryItem = data;
           await setCachedComponent(namespace, name, data);
-          spinner.succeed(
-            chalk.green(`✅ Fetched ${chalk.cyan(componentName)}`),
-          );
+          if (options.verbose) {
+            console.log(
+              chalk.green(`✅ Fetched ${chalk.cyan(componentIdWithVersion)}`),
+            );
+          } else {
+            spinner?.succeed(
+              chalk.green(`✅ Fetched ${chalk.cyan(componentIdWithVersion)}`),
+            );
+          }
         }
       } else {
+        if (options.verbose) {
+          console.log(
+            chalk.blue(`🔄 Force refreshing from registry: ${componentUrl}`),
+          );
+        }
         const { data } = await axios.get(componentUrl);
         registryItem = data;
         await setCachedComponent(namespace, name, data);
-        spinner.succeed(chalk.green(`✅ Fetched ${chalk.cyan(componentName)}`));
+        if (options.verbose) {
+          console.log(
+            chalk.green(`✅ Fetched ${chalk.cyan(componentIdWithVersion)}`),
+          );
+        } else {
+          spinner?.succeed(
+            chalk.green(`✅ Fetched ${chalk.cyan(componentIdWithVersion)}`),
+          );
+        }
       }
 
-      const installSpinner = ora("🔧 Installing component...").start();
+      if (options.verbose) {
+        console.log(chalk.blue(`📋 Component details:`));
+        console.log(`  Name: ${registryItem.name}`);
+        console.log(`  Title: ${registryItem.title || "N/A"}`);
+        console.log(`  Description: ${registryItem.description || "N/A"}`);
+        console.log(`  Author: ${registryItem.author || "N/A"}`);
+        console.log(`  Type: ${registryItem.type || "N/A"}`);
+        console.log(`  Files: ${registryItem.files?.length || 0}`);
+        if (registryItem.dependencies?.length > 0) {
+          console.log(
+            `  Dependencies: ${registryItem.dependencies.join(", ")}`,
+          );
+        }
+        if (registryItem.registryDependencies?.length > 0) {
+          console.log(
+            `  Registry Dependencies: ${registryItem.registryDependencies.join(", ")}`,
+          );
+        }
+        console.log("");
+      }
 
-      for (const file of registryItem.files) {
-        const fileUrl = `${REGISTRY_URL}/${namespace}/${name}/${version}/${file.path}`;
+      if (options.dryRun) {
+        console.log(
+          chalk.cyan(
+            `🔍 DRY RUN - Would install ${chalk.cyan(componentIdWithVersion)}`,
+          ),
+        );
+        console.log(chalk.gray(`📁 Files to be installed:`));
+        for (const file of registryItem.files || []) {
+          const localPath = file.path.replace(
+            "components",
+            aliases.components.replace("@/", ""),
+          );
+          const installPath = path.join(CWD, localPath);
+          console.log(chalk.gray(`  - ${path.relative(CWD, installPath)}`));
+        }
+
+        if (registryItem.dependencies?.length > 0 && !options.skipDeps) {
+          console.log(
+            chalk.gray(
+              `📦 Dependencies to install: ${registryItem.dependencies.join(", ")}`,
+            ),
+          );
+        }
+
+        if (
+          registryItem.registryDependencies?.length > 0 &&
+          !options.skipDeps
+        ) {
+          console.log(
+            chalk.gray(
+              `🔗 Registry dependencies to install: ${registryItem.registryDependencies.join(", ")}`,
+            ),
+          );
+        }
+
+        if (registryItem.cssVars) {
+          console.log(chalk.gray(`🎨 CSS variables would be applied`));
+        }
+
+        return;
+      }
+
+      const installSpinner = options.verbose
+        ? null
+        : ora("🔧 Installing component...").start();
+
+      const customPath = options.path;
+      const baseComponentsPath =
+        customPath || aliases.components.replace("@/", "");
+
+      for (const file of registryItem.files || []) {
+        const fileUrl = getComponentFileUrl(
+          namespace,
+          name,
+          resolvedVersion,
+          file.path,
+        );
+
+        if (options.verbose) {
+          console.log(chalk.blue(`📥 Downloading: ${file.path}`));
+        }
+
         const { data: fileContent } = await axios.get(fileUrl);
 
-        const localPath = file.path.replace(
-          "components",
-          aliases.components.replace("@/", ""),
-        );
+        const localPath = file.path.replace("components", baseComponentsPath);
         const installPath = path.join(CWD, localPath);
+
+        if (options.verbose) {
+          console.log(
+            chalk.green(`📝 Writing: ${path.relative(CWD, installPath)}`),
+          );
+        }
 
         await fs.ensureDir(path.dirname(installPath));
         await fs.writeFile(installPath, fileContent);
       }
 
-      if (registryItem.dependencies?.length > 0) {
-        installSpinner.text = "📦 Installing npm dependencies...";
+      if (registryItem.dependencies?.length > 0 && !options.skipDeps) {
+        if (options.verbose) {
+          console.log(
+            chalk.blue(
+              `📦 Installing npm dependencies: ${registryItem.dependencies.join(", ")}`,
+            ),
+          );
+        } else {
+          installSpinner!.text = "📦 Installing npm dependencies...";
+        }
+
         const { execSync } = await import("child_process");
         try {
           const packageManager = await detectPackageManager(CWD);
@@ -138,7 +288,18 @@ export const add = new Command()
             packageManager,
             registryItem.dependencies,
           );
+
+          if (options.verbose) {
+            console.log(chalk.gray(`Running: ${installCommand}`));
+          }
+
           execSync(installCommand, { stdio: "inherit", cwd: CWD });
+
+          if (options.verbose) {
+            console.log(
+              chalk.green(`✅ NPM dependencies installed successfully`),
+            );
+          }
         } catch (error) {
           console.warn(
             chalk.yellow(
@@ -148,28 +309,51 @@ export const add = new Command()
         }
       }
 
-      if (registryItem.registryDependencies?.length > 0) {
-        installSpinner.text = "🔗 Installing registry dependencies...";
+      if (registryItem.registryDependencies?.length > 0 && !options.skipDeps) {
+        if (options.verbose) {
+          console.log(
+            chalk.blue(
+              `🔗 Installing registry dependencies: ${registryItem.registryDependencies.join(", ")}`,
+            ),
+          );
+        } else {
+          installSpinner!.text = "🔗 Installing registry dependencies...";
+        }
+
         for (const dep of registryItem.registryDependencies) {
           try {
             const { execSync } = await import("child_process");
-
-            // Check if this dependency is a reserved component name
             const depName = dep.split("/").pop() || dep;
             if (isReservedComponentName(depName)) {
-              console.log(
-                chalk.yellow(
-                  `⚠️  Dependency "${depName}" is a reserved shadcn/ui component`,
-                ),
-              );
-              console.log(
-                chalk.blue(`🔄 Installing ${depName} using shadcn/ui...`),
-              );
+              if (options.verbose) {
+                console.log(
+                  chalk.yellow(
+                    `⚠️  Dependency "${depName}" is a reserved shadcn/ui component`,
+                  ),
+                );
+                console.log(
+                  chalk.blue(`🔄 Installing ${depName} using shadcn/ui...`),
+                );
+              } else {
+                console.log(
+                  chalk.yellow(
+                    `⚠️  Dependency "${depName}" is a reserved shadcn/ui component`,
+                  ),
+                );
+                console.log(
+                  chalk.blue(`🔄 Installing ${depName} using shadcn/ui...`),
+                );
+              }
               execSync(`npx shadcn@latest add ${depName}`, {
                 stdio: "inherit",
                 cwd: CWD,
               });
             } else {
+              if (options.verbose) {
+                console.log(
+                  chalk.blue(`📦 Installing registry dependency: ${dep}`),
+                );
+              }
               execSync(`scm add ${dep}`, { stdio: "inherit", cwd: CWD });
             }
           } catch (error) {
@@ -183,20 +367,47 @@ export const add = new Command()
       }
 
       if (registryItem.cssVars) {
-        installSpinner.text = "🎨 Applying CSS variables...";
+        if (options.verbose) {
+          console.log(chalk.blue(`🎨 Applying CSS variables...`));
+        } else {
+          installSpinner!.text = "🎨 Applying CSS variables...";
+        }
         await applyCssVariables(registryItem.cssVars, aliases, CWD);
       }
 
-      // Track the installed component for future updates
-      await trackInstalledComponent(componentName, version, CWD);
+      await trackInstalledComponent(
+        componentWithoutVersion,
+        resolvedVersion,
+        CWD,
+      );
 
-      installSpinner.succeed(
-        chalk.green(`✅ ${chalk.cyan(componentName)} installed successfully`),
-      );
+      if (options.verbose) {
+        console.log(
+          chalk.green(
+            `✅ ${chalk.cyan(componentIdWithVersion)} installed successfully`,
+          ),
+        );
+      } else {
+        installSpinner?.succeed(
+          chalk.green(
+            `✅ ${chalk.cyan(componentIdWithVersion)} installed successfully`,
+          ),
+        );
+      }
     } catch (error) {
-      spinner.fail(
-        chalk.red(`❌ Failed to install ${chalk.cyan(componentName)}`),
-      );
+      if (options.verbose) {
+        console.error(
+          chalk.red(
+            `❌ Failed to install ${chalk.cyan(componentIdWithVersion)}`,
+          ),
+        );
+      } else {
+        spinner?.fail(
+          chalk.red(
+            `❌ Failed to install ${chalk.cyan(componentIdWithVersion)}`,
+          ),
+        );
+      }
       if (axios.isAxiosError(error) && error.response?.status === 404) {
         console.error(chalk.red("Component not found in registry"));
       } else {
@@ -207,9 +418,7 @@ export const add = new Command()
   });
 
 /**
- * Detects the package manager used in the current project
- * @param cwd - Current working directory
- * @returns Promise resolving to package manager name
+ * Detects the package manager used in the current project.
  */
 async function detectPackageManager(cwd: string): Promise<string> {
   const packageManagers = [
@@ -231,10 +440,7 @@ async function detectPackageManager(cwd: string): Promise<string> {
 }
 
 /**
- * Generates the install command for the specified package manager
- * @param packageManager - Package manager name
- * @param dependencies - Array of dependencies to install
- * @returns Install command string
+ * Generates the install command for the specified package manager.
  */
 function getInstallCommand(
   packageManager: string,
@@ -256,10 +462,7 @@ function getInstallCommand(
 }
 
 /**
- * Applies CSS variables to the project's CSS file
- * @param cssVars - CSS variables object
- * @param aliases - Project aliases configuration
- * @param cwd - Current working directory
+ * Applies CSS variables to the project's CSS file.
  */
 async function applyCssVariables(cssVars: any, aliases: any, cwd: string) {
   const cssPath = path.join(cwd, aliases.css || "src/app/globals.css");
@@ -294,10 +497,7 @@ async function applyCssVariables(cssVars: any, aliases: any, cwd: string) {
 }
 
 /**
- * Tracks an installed component for future updates
- * @param componentName - Name of the component
- * @param version - Version that was installed
- * @param cwd - Current working directory
+ * Tracks an installed component for future updates.
  */
 async function trackInstalledComponent(
   componentName: string,
@@ -319,7 +519,7 @@ async function trackInstalledComponent(
 
     await fs.writeJson(trackingPath, tracking, { spaces: 2 });
   } catch (error) {
-    // Silently fail - tracking is not critical
+    // Tracking is not critical, so fail silently
     console.warn(chalk.yellow("⚠️  Failed to track installed component"));
   }
 }
