@@ -5,12 +5,21 @@ import fs from "fs-extra";
 import ora from "ora";
 import path from "path";
 import { getCachedComponent, setCachedComponent } from "../lib/cache.js";
-import { isReservedComponentName } from "../lib/constants.js";
 import {
   getComponentFileUrl,
   getComponentRegistryUrl,
   resolveComponentVersion,
 } from "../lib/registry.js";
+import {
+  handleFileConflict,
+  mergeCssVariables,
+  parseComponentName,
+  resolveDependencies,
+  validateFileContent,
+  validateFileTargets,
+  validateVersion,
+  withRetry,
+} from "../lib/utils.js";
 
 /**
  * Command to add a component to the current project.
@@ -25,58 +34,26 @@ export const add = new Command()
   .option("-s, --skip-deps", "Skip installing dependencies")
   .option("-v, --verbose", "Show detailed installation info")
   .option("-y, --yes", "Skip confirmation prompts")
+  .option("-o, --overwrite", "Overwrite existing files")
   .action(async (componentName, options) => {
-    const versionMatch = componentName.match(/^(.+?)@(.+)$/);
-    const componentWithoutVersion = versionMatch
-      ? versionMatch[1]
-      : componentName;
-    const version = versionMatch ? versionMatch[2] : "latest";
+    const CWD = process.cwd();
 
-    const [namespace, name] = componentWithoutVersion.split("/");
-    if (!namespace || !name) {
-      console.error(
-        chalk.red(
-          "❌ Invalid component name. Use: <namespace>/<component>[@version]",
-        ),
-      );
+    const parsedComponent = parseComponentName(componentName);
+    if (!parsedComponent.isValid) {
+      console.error(chalk.red(`❌ ${parsedComponent.error}`));
       process.exit(1);
     }
 
-    if (isReservedComponentName(name)) {
-      console.log(
-        chalk.yellow(`⚠️  "${name}" is a reserved shadcn/ui component name`),
-      );
-      console.log(chalk.blue(`🔄 Redirecting to shadcn add ${name}...`));
+    const { namespace, name, version } = parsedComponent;
 
-      if (options.dryRun) {
-        console.log(chalk.cyan(`Would run: npx shadcn@latest add ${name}`));
-        return;
-      }
-
-      try {
-        const { execSync } = await import("child_process");
-        execSync(`npx shadcn@latest add ${name}`, {
-          stdio: "inherit",
-          cwd: process.cwd(),
-        });
-        console.log(
-          chalk.green(`✅ Successfully installed ${name} using shadcn/ui`),
-        );
-        return;
-      } catch (error) {
-        console.error(
-          chalk.red(`❌ Failed to install ${name} using shadcn/ui`),
-        );
-        console.error(
-          chalk.yellow(
-            "💡 Make sure you have shadcn/ui initialized in your project",
-          ),
-        );
+    if (version !== "latest") {
+      const versionValidation = validateVersion(version);
+      if (!versionValidation.isValid) {
+        console.error(chalk.red(`❌ ${versionValidation.error}`));
         process.exit(1);
       }
     }
 
-    const CWD = process.cwd();
     const componentsJsonPath = path.join(CWD, "components.json");
 
     if (!(await fs.pathExists(componentsJsonPath))) {
@@ -97,10 +74,10 @@ export const add = new Command()
     }
 
     const resolvedVersion = await resolveComponentVersion(
-      componentWithoutVersion,
+      `${namespace}/${name}`,
       version,
     );
-    const componentIdWithVersion = `${componentWithoutVersion}@${resolvedVersion}`;
+    const componentIdWithVersion = `${namespace}/${name}@${resolvedVersion}`;
 
     const componentUrl = getComponentRegistryUrl(
       namespace,
@@ -115,10 +92,9 @@ export const add = new Command()
     try {
       let registryItem: any;
 
-      const cacheKey = `${namespace}-${name}-${resolvedVersion}`;
       if (!options.force) {
         const cached = await getCachedComponent(namespace, name);
-        if (cached) {
+        if (cached && cached.version === resolvedVersion) {
           if (options.verbose) {
             console.log(
               chalk.green(
@@ -139,7 +115,11 @@ export const add = new Command()
               chalk.blue(`📥 Fetching from registry: ${componentUrl}`),
             );
           }
-          const { data } = await axios.get(componentUrl);
+          const { data } = await withRetry(
+            () => axios.get(componentUrl),
+            {},
+            `Fetch component ${componentIdWithVersion}`
+          );
           registryItem = data;
           await setCachedComponent(namespace, name, data);
           if (options.verbose) {
@@ -158,7 +138,11 @@ export const add = new Command()
             chalk.blue(`🔄 Force refreshing from registry: ${componentUrl}`),
           );
         }
-        const { data } = await axios.get(componentUrl);
+        const { data } = await withRetry(
+          () => axios.get(componentUrl),
+          {},
+          `Fetch component ${componentIdWithVersion}`
+        );
         registryItem = data;
         await setCachedComponent(namespace, name, data);
         if (options.verbose) {
@@ -170,6 +154,15 @@ export const add = new Command()
             chalk.green(`✅ Fetched ${chalk.cyan(componentIdWithVersion)}`),
           );
         }
+      }
+
+      const fileValidation = validateFileTargets(registryItem.files || [], CWD);
+      if (!fileValidation.isValid) {
+        spinner?.fail(chalk.red("❌ File validation failed"));
+        fileValidation.errors.forEach((error) =>
+          console.error(chalk.red(`  - ${error}`)),
+        );
+        process.exit(1);
       }
 
       if (options.verbose) {
@@ -243,125 +236,179 @@ export const add = new Command()
       const baseComponentsPath =
         customPath || aliases.components.replace("@/", "");
 
-      for (const file of registryItem.files || []) {
-        const fileUrl = getComponentFileUrl(
-          namespace,
-          name,
-          resolvedVersion,
-          file.path,
-        );
+      const installedFiles: string[] = [];
 
-        if (options.verbose) {
-          console.log(chalk.blue(`📥 Downloading: ${file.path}`));
-        }
-
-        const { data: fileContent } = await axios.get(fileUrl);
-
-        const localPath = file.path.replace("components", baseComponentsPath);
-        const installPath = path.join(CWD, localPath);
-
-        if (options.verbose) {
-          console.log(
-            chalk.green(`📝 Writing: ${path.relative(CWD, installPath)}`),
-          );
-        }
-
-        await fs.ensureDir(path.dirname(installPath));
-        await fs.writeFile(installPath, fileContent);
-      }
-
-      if (registryItem.dependencies?.length > 0 && !options.skipDeps) {
-        if (options.verbose) {
-          console.log(
-            chalk.blue(
-              `📦 Installing npm dependencies: ${registryItem.dependencies.join(", ")}`,
-            ),
-          );
-        } else {
-          installSpinner!.text = "📦 Installing npm dependencies...";
-        }
-
-        const { execSync } = await import("child_process");
-        try {
-          const packageManager = await detectPackageManager(CWD);
-          const installCommand = getInstallCommand(
-            packageManager,
-            registryItem.dependencies,
+      try {
+        for (const file of registryItem.files || []) {
+          const fileUrl = getComponentFileUrl(
+            namespace,
+            name,
+            resolvedVersion,
+            file.path,
           );
 
           if (options.verbose) {
-            console.log(chalk.gray(`Running: ${installCommand}`));
+            console.log(chalk.blue(`📥 Downloading: ${file.path}`));
           }
 
-          execSync(installCommand, { stdio: "inherit", cwd: CWD });
+          const { data: fileContent } = await withRetry(
+            () => axios.get(fileUrl),
+            {},
+            `Download file ${file.path}`
+          );
+
+          const validatedContent = validateFileContent(fileContent, file.path);
+
+          const safePath = file.path.replace(/^components\//, "");
+          if (
+            safePath.includes("..") ||
+            safePath.includes("\\") ||
+            safePath.startsWith("/")
+          ) {
+            throw new Error(`Unsafe file path detected: ${file.path}`);
+          }
+          const localPath = path.join(baseComponentsPath, safePath);
+          const installPath = path.join(CWD, localPath);
+
+          if (!installPath.startsWith(CWD)) {
+            throw new Error(`Path traversal attack detected: ${file.path}`);
+          }
+
+          const shouldWrite = await handleFileConflict(installPath, options);
+          if (!shouldWrite) {
+            if (options.verbose) {
+              console.log(
+                chalk.yellow(`⏭️  Skipped: ${path.relative(CWD, installPath)}`),
+              );
+            }
+            continue;
+          }
 
           if (options.verbose) {
             console.log(
-              chalk.green(`✅ NPM dependencies installed successfully`),
+              chalk.green(`📝 Writing: ${path.relative(CWD, installPath)}`),
             );
           }
-        } catch (error) {
-          console.warn(
-            chalk.yellow(
-              "⚠️  Failed to install npm dependencies. Install manually.",
-            ),
-          );
+
+          await fs.ensureDir(path.dirname(installPath));
+          await fs.writeFile(installPath, validatedContent);
+          installedFiles.push(installPath);
         }
+
+      } catch (error) {
+        for (const filePath of installedFiles) {
+          try {
+            await fs.remove(filePath);
+          } catch (rollbackError) {
+            console.warn(
+              chalk.yellow(`⚠️  Could not remove ${filePath} during rollback`),
+            );
+          }
+        }
+        throw error;
       }
 
-      if (registryItem.registryDependencies?.length > 0 && !options.skipDeps) {
-        if (options.verbose) {
-          console.log(
-            chalk.blue(
-              `🔗 Installing registry dependencies: ${registryItem.registryDependencies.join(", ")}`,
-            ),
+      if (!options.skipDeps) {
+        const resolvedDeps = await resolveDependencies(
+          registryItem.dependencies || [],
+          registryItem.registryDependencies || [],
+        );
+
+        if (resolvedDeps.conflicts.length > 0) {
+          console.warn(chalk.yellow("⚠️  Dependency conflicts detected:"));
+          resolvedDeps.conflicts.forEach((conflict) =>
+            console.warn(chalk.yellow(`  - ${conflict}`)),
           );
-        } else {
-          installSpinner!.text = "🔗 Installing registry dependencies...";
         }
 
-        for (const dep of registryItem.registryDependencies) {
+        if (resolvedDeps.npm.length > 0) {
+          if (options.verbose) {
+            console.log(
+              chalk.blue(
+                `📦 Installing npm dependencies: ${resolvedDeps.npm.join(", ")}`,
+              ),
+            );
+          } else {
+            installSpinner!.text = "📦 Installing npm dependencies...";
+          }
+
+          const { execSync } = await import("child_process");
           try {
-            const { execSync } = await import("child_process");
-            const depName = dep.split("/").pop() || dep;
-            if (isReservedComponentName(depName)) {
-              if (options.verbose) {
-                console.log(
-                  chalk.yellow(
-                    `⚠️  Dependency "${depName}" is a reserved shadcn/ui component`,
-                  ),
-                );
-                console.log(
-                  chalk.blue(`🔄 Installing ${depName} using shadcn/ui...`),
-                );
-              } else {
-                console.log(
-                  chalk.yellow(
-                    `⚠️  Dependency "${depName}" is a reserved shadcn/ui component`,
-                  ),
-                );
-                console.log(
-                  chalk.blue(`🔄 Installing ${depName} using shadcn/ui...`),
-                );
-              }
-              execSync(`npx shadcn@latest add ${depName}`, {
-                stdio: "inherit",
-                cwd: CWD,
-              });
-            } else {
+            const packageManager = await detectPackageManager(CWD);
+            const installCommand = getInstallCommand(
+              packageManager,
+              resolvedDeps.npm,
+            );
+
+            if (options.verbose) {
+              console.log(chalk.gray(`Running: ${installCommand}`));
+            }
+
+            execSync(installCommand, { stdio: "inherit", cwd: CWD });
+
+            if (options.verbose) {
+              console.log(
+                chalk.green(`✅ NPM dependencies installed successfully`),
+              );
+            }
+          } catch (error) {
+            console.error(
+              chalk.red(`❌ Failed to install npm dependencies: ${error}`),
+            );
+            console.log(
+              chalk.yellow(
+                "💡 Install manually: " + resolvedDeps.npm.join(" "),
+              ),
+            );
+          }
+        }
+
+        if (resolvedDeps.registry.length > 0) {
+          if (options.verbose) {
+            console.log(
+              chalk.blue(
+                `🔗 Installing registry dependencies: ${resolvedDeps.registry.join(", ")}`,
+              ),
+            );
+          } else {
+            installSpinner!.text = "🔗 Installing registry dependencies...";
+          }
+
+          const currentDeps = new Set([`${namespace}/${name}`]);
+          const checkCircular = (
+            dep: string,
+            visited: Set<string> = new Set(),
+          ): boolean => {
+            if (visited.has(dep)) return true;
+            if (currentDeps.has(dep)) return true;
+            visited.add(dep);
+            return false;
+          };
+
+          for (const dep of resolvedDeps.registry) {
+            if (checkCircular(dep)) {
+              console.error(
+                chalk.red(`❌ Circular dependency detected: ${dep}`),
+              );
+              continue;
+            }
+
+            try {
+              const { execSync } = await import("child_process");
               if (options.verbose) {
                 console.log(
                   chalk.blue(`📦 Installing registry dependency: ${dep}`),
                 );
               }
-              execSync(`scm add ${dep}`, { stdio: "inherit", cwd: CWD });
+              execSync(`scm add ${dep} --skip-deps`, {
+                stdio: "inherit",
+                cwd: CWD,
+              });
+            } catch (error) {
+              console.error(
+                chalk.red(`❌ Failed to install dependency ${dep}: ${error}`),
+              );
             }
-          } catch (error) {
-            console.warn(
-              chalk.yellow(
-                `⚠️  Failed to install dependency ${dep}. Install manually.`,
-              ),
-            );
           }
         }
       }
@@ -376,7 +423,7 @@ export const add = new Command()
       }
 
       await trackInstalledComponent(
-        componentWithoutVersion,
+        `${namespace}/${name}`,
         resolvedVersion,
         CWD,
       );
@@ -462,37 +509,15 @@ function getInstallCommand(
 }
 
 /**
- * Applies CSS variables to the project's CSS file.
+ * Applies CSS variables to the project's CSS file with smart merging.
  */
 async function applyCssVariables(cssVars: any, aliases: any, cwd: string) {
   const cssPath = path.join(cwd, aliases.css || "src/app/globals.css");
 
   if (await fs.pathExists(cssPath)) {
-    let cssContent = await fs.readFile(cssPath, "utf-8");
-
-    const cssVarsContent = `
-/* SCM Component CSS Variables */
-:root {
-  ${Object.entries(cssVars.theme || {})
-    .map(([key, value]) => `  --${key}: ${value};`)
-    .join("\n")}
-}
-
-.light {
-  ${Object.entries(cssVars.light || {})
-    .map(([key, value]) => `  --${key}: ${value};`)
-    .join("\n")}
-}
-
-.dark {
-  ${Object.entries(cssVars.dark || {})
-    .map(([key, value]) => `  --${key}: ${value};`)
-    .join("\n")}
-}
-`;
-
-    cssContent += cssVarsContent;
-    await fs.writeFile(cssPath, cssContent);
+    const existingCss = await fs.readFile(cssPath, "utf-8");
+    const mergedCss = mergeCssVariables(existingCss, cssVars);
+    await fs.writeFile(cssPath, mergedCss);
   }
 }
 
@@ -519,7 +544,6 @@ async function trackInstalledComponent(
 
     await fs.writeJson(trackingPath, tracking, { spaces: 2 });
   } catch (error) {
-    // Tracking is not critical, so fail silently
     console.warn(chalk.yellow("⚠️  Failed to track installed component"));
   }
 }

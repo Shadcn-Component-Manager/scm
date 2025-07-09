@@ -161,6 +161,9 @@ async function pollForAuthorization(
 
   while (Date.now() < expirationTime) {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
       const response = await fetch(
         "https://github.com/login/oauth/access_token",
         {
@@ -174,8 +177,11 @@ async function pollForAuthorization(
             device_code: deviceCode,
             grant_type: "urn:ietf:params:oauth:grant-type:device_code",
           }),
+          signal: controller.signal,
         },
       );
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorText = await response.text();

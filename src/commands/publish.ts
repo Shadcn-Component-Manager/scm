@@ -18,6 +18,7 @@ import {
   getMainBranchSha,
 } from "../lib/github.js";
 import { registryItemSchema, registrySchema } from "../lib/registry.js";
+import { validateFileTargets } from "../lib/utils.js";
 import { validateComponent } from "../lib/validator.js";
 import { detectVersionChanges } from "../lib/versioning.js";
 
@@ -37,6 +38,7 @@ export const publish = new Command()
     "-v, --version <version>",
     "Specify version manually (override auto-detection)",
   )
+  .option("--verbose", "Show detailed information")
   .action(async (options) => {
     const CWD = process.cwd();
     const registryJsonPath = path.join(CWD, "registry.json");
@@ -152,6 +154,15 @@ export const publish = new Command()
         );
       }
 
+      const fileValidation = validateFileTargets(files || [], CWD);
+      if (!fileValidation.isValid) {
+        spinner.fail(chalk.red("❌ File validation failed"));
+        fileValidation.errors.forEach((error) =>
+          console.error(chalk.red(`  - ${error}`)),
+        );
+        process.exit(1);
+      }
+
       spinner.text = "🔍 Validating component files...";
       const validationResult = await validateComponent(CWD, selectedItem);
       if (!validationResult.isValid) {
@@ -221,7 +232,8 @@ export const publish = new Command()
       const version = versionInfo.hasChanges
         ? versionInfo.newVersion
         : baseVersion;
-      const branchName = `component/${user.login}/${componentName}-${version}`;
+      const timestamp = Date.now();
+      const branchName = `component/${user.login}/${componentName}-${version}-${timestamp}`;
 
       const mainBranchSha = await getMainBranchSha();
 

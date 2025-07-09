@@ -4,7 +4,11 @@ import fs from "fs-extra";
 import inquirer from "inquirer";
 import ora from "ora";
 import path from "path";
-import { isReservedComponentName } from "../lib/constants.js";
+import {
+  ensureWritableDirectory,
+  validateComponentName,
+  validateFileTargets,
+} from "../lib/utils.js";
 
 /**
  * Command to create a new component
@@ -27,24 +31,26 @@ export const create = new Command()
   .option("-s, --skip-template", "Don't generate template files")
   .action(async (componentName, options) => {
     const CWD = process.cwd();
-    const customPath = options.path;
-    const basePath = customPath || CWD;
-    const componentDir = path.join(basePath, "components", componentName);
 
-    if (isReservedComponentName(componentName)) {
+    const nameValidation = validateComponentName(componentName);
+    if (!nameValidation.isValid) {
+      console.error(chalk.red(`❌ ${nameValidation.error}`));
+      process.exit(1);
+    }
+
+    const validTypes = ["ui", "hook", "theme", "block", "page"];
+    if (!validTypes.includes(options.type)) {
       console.error(
-        chalk.red(`❌ Component name "${componentName}" is reserved`),
-      );
-      console.error(
-        chalk.yellow(
-          "This name conflicts with an existing shadcn/ui component",
+        chalk.red(
+          `❌ Invalid component type. Must be one of: ${validTypes.join(", ")}`,
         ),
-      );
-      console.error(
-        chalk.gray("Please choose a different name for your component"),
       );
       process.exit(1);
     }
+
+    const customPath = options.path;
+    const basePath = customPath || CWD;
+    const componentDir = path.join(basePath, "components", componentName);
 
     if (await fs.pathExists(componentDir)) {
       if (options.force) {
@@ -58,6 +64,12 @@ export const create = new Command()
         );
         process.exit(1);
       }
+    }
+
+    const dirCheck = await ensureWritableDirectory(path.dirname(componentDir));
+    if (!dirCheck.success) {
+      console.error(chalk.red(`❌ ${dirCheck.error}`));
+      process.exit(1);
     }
 
     let description = options.description;
@@ -122,6 +134,15 @@ export const create = new Command()
         },
       ],
     };
+
+    const fileValidation = validateFileTargets(registryItem.files, CWD);
+    if (!fileValidation.isValid) {
+      console.error(chalk.red("❌ File validation failed"));
+      fileValidation.errors.forEach((error) =>
+        console.error(chalk.red(`  - ${error}`)),
+      );
+      process.exit(1);
+    }
 
     const spinner = ora(`📝 Creating ${chalk.cyan(componentName)}...`).start();
     try {

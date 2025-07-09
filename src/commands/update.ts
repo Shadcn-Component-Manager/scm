@@ -7,6 +7,7 @@ import ora from "ora";
 import path from "path";
 import { REGISTRY_INDEX_URL } from "../lib/constants.js";
 import { getComponentRegistryUrl } from "../lib/registry.js";
+import { parseComponentName, validateVersion, withRetry } from "../lib/utils.js";
 import { isVersionGreater } from "../lib/versioning.js";
 
 /**
@@ -29,6 +30,7 @@ export const update = new Command()
   .option("-s, --skip-deps", "Skip updating dependencies")
   .option("-c, --check-only", "Only check for updates, don't install")
   .option("-i, --interactive", "Interactive mode for each component")
+  .option("--verbose", "Show detailed information")
   .action(async (componentName, options) => {
     const CWD = process.cwd();
 
@@ -47,12 +49,20 @@ async function updateComponent(
   cwd: string,
   options: any,
 ) {
-  const [namespace, name] = componentName.split("/");
-  if (!namespace || !name) {
-    console.error(
-      chalk.red("❌ Invalid component name. Use: <namespace>/<component>"),
-    );
+  const parsedComponent = parseComponentName(componentName);
+  if (!parsedComponent.isValid) {
+    console.error(chalk.red(`❌ ${parsedComponent.error}`));
     process.exit(1);
+  }
+
+  const { namespace, name } = parsedComponent;
+
+  if (options.version) {
+    const versionValidation = validateVersion(options.version);
+    if (!versionValidation.isValid) {
+      console.error(chalk.red(`❌ ${versionValidation.error}`));
+      process.exit(1);
+    }
   }
 
   const spinner = ora(
@@ -228,7 +238,17 @@ async function updateAllComponents(cwd: string, options: any) {
 
     for (const component of installedComponents) {
       try {
-        const [namespace, name] = component.name.split("/");
+        const parsedComponent = parseComponentName(component.name);
+        if (!parsedComponent.isValid) {
+          console.warn(
+            chalk.yellow(
+              `⚠️  Skipping invalid component name: ${component.name}`,
+            ),
+          );
+          continue;
+        }
+
+        const { namespace, name } = parsedComponent;
         const currentVersion = component.version;
         let latestVersion: string | null;
 
@@ -365,7 +385,11 @@ async function getLatestVersion(
   name: string,
 ): Promise<string | null> {
   try {
-    const { data: index } = await axios.get(REGISTRY_INDEX_URL);
+    const { data: index } = await withRetry(
+      () => axios.get(REGISTRY_INDEX_URL),
+      {},
+      "Fetch registry index"
+    );
 
     const component = index.find(
       (item: any) => item.name === `${namespace}/${name}`,
@@ -376,7 +400,11 @@ async function getLatestVersion(
     }
 
     const componentUrl = getComponentRegistryUrl(namespace, name, "latest");
-    const { data: registryItem } = await axios.get(componentUrl);
+    const { data: registryItem } = await withRetry(
+      () => axios.get(componentUrl),
+      {},
+      `Fetch component ${namespace}/${name}`
+    );
 
     return registryItem.version || null;
   } catch (error) {

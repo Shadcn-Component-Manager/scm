@@ -2,12 +2,14 @@ import axios from "axios";
 import chalk from "chalk";
 import { Command } from "commander";
 import ora from "ora";
+import { getCachedComponent, setCachedComponent } from "../lib/cache.js";
 import {
   getComponentFileUrl,
   getComponentReadmeUrl,
   getComponentRegistryUrl,
   resolveComponentVersion,
 } from "../lib/registry.js";
+import { parseComponentName, validateVersion, withRetry } from "../lib/utils.js";
 
 /**
  * Command to preview a component from the registry
@@ -25,25 +27,26 @@ export const preview = new Command()
   .option("-r, --raw", "Show raw file content")
   .option("-d, --dependencies", "Show dependency tree")
   .option("-c, --code", "Show only code without metadata")
+  .option("-v, --verbose", "Show detailed information")
   .action(async (componentName, options) => {
-    const versionMatch = componentName.match(/^(.+?)@(.+)$/);
-    const componentWithoutVersion = versionMatch
-      ? versionMatch[1]
-      : componentName;
-    const version = versionMatch ? versionMatch[2] : "latest";
-
-    const [namespace, name] = componentWithoutVersion.split("/");
-    if (!namespace || !name) {
-      console.error(
-        chalk.red(
-          "❌ Invalid component name. Use: <namespace>/<component>[@version]",
-        ),
-      );
+    const parsedComponent = parseComponentName(componentName);
+    if (!parsedComponent.isValid) {
+      console.error(chalk.red(`❌ ${parsedComponent.error}`));
       process.exit(1);
     }
 
+    const { namespace, name, version } = parsedComponent;
+
+    if (version !== "latest") {
+      const versionValidation = validateVersion(version);
+      if (!versionValidation.isValid) {
+        console.error(chalk.red(`❌ ${versionValidation.error}`));
+        process.exit(1);
+      }
+    }
+
     const resolvedVersion = await resolveComponentVersion(
-      componentWithoutVersion,
+      `${namespace}/${name}`,
       version,
     );
 
@@ -56,16 +59,39 @@ export const preview = new Command()
     const fetchSpinner = options.code
       ? null
       : ora(
-          `📦 Fetching ${chalk.cyan(`${componentWithoutVersion}@${resolvedVersion}`)}...`,
+          `📦 Fetching ${chalk.cyan(`${namespace}/${name}@${resolvedVersion}`)}...`,
         ).start();
 
     try {
-      const { data: registryItem } = await axios.get(componentUrl);
+      let registryItem: any;
+
+      if (!options.force) {
+        const cached = await getCachedComponent(namespace, name);
+        if (cached) {
+          if (options.verbose) {
+            console.log(chalk.green("✅ Using cached data"));
+          }
+          registryItem = cached;
+        }
+      }
+
+      if (!registryItem) {
+        if (options.verbose) {
+          console.log(chalk.blue(`📥 Fetching from registry: ${componentUrl}`));
+        }
+        const { data } = await withRetry(
+          () => axios.get(componentUrl),
+          {},
+          `Fetch component ${namespace}/${name}@${resolvedVersion}`
+        );
+        registryItem = data;
+        await setCachedComponent(namespace, name, data);
+      }
 
       if (!options.code) {
         fetchSpinner?.succeed(
           chalk.green(
-            `✅ Fetched ${chalk.cyan(`${componentWithoutVersion}@${resolvedVersion}`)}`,
+            `✅ Fetched ${chalk.cyan(`${namespace}/${name}@${resolvedVersion}`)}`,
           ),
         );
       }
@@ -83,7 +109,11 @@ export const preview = new Command()
             resolvedVersion,
             file.path,
           );
-          const { data: fileContent } = await axios.get(fileUrl);
+          const { data: fileContent } = await withRetry(
+            () => axios.get(fileUrl),
+            {},
+            `Download file ${file.path}`
+          );
           console.log(`// ${file.path}`);
           console.log(fileContent);
           console.log("");
@@ -200,7 +230,6 @@ export const preview = new Command()
         return;
       }
 
-      // Default text output
       console.log(chalk.bold(`\n${registryItem.title || registryItem.name}`));
       console.log(chalk.gray(`by ${registryItem.author || "Unknown"}`));
       console.log(chalk.gray(`Version: ${resolvedVersion}`));
@@ -235,7 +264,11 @@ export const preview = new Command()
 
       const readmeUrl = getComponentReadmeUrl(namespace, name, resolvedVersion);
       try {
-        const { data: readmeContent } = await axios.get(readmeUrl);
+        const { data: readmeContent } = await withRetry(
+          () => axios.get(readmeUrl),
+          {},
+          `Download README for ${namespace}/${name}@${resolvedVersion}`
+        );
         console.log(chalk.bold("\n📖 README:"));
         console.log(chalk.gray("─".repeat(50)));
         console.log(readmeContent);
@@ -273,14 +306,14 @@ export const preview = new Command()
 
       console.log(
         chalk.green(
-          `\n💡 To install this component, run: ${chalk.cyan(`scm add ${componentWithoutVersion}@${resolvedVersion}`)}`,
+          `\n💡 To install this component, run: ${chalk.cyan(`scm add ${namespace}/${name}@${resolvedVersion}`)}`,
         ),
       );
     } catch (error) {
       if (!options.code) {
         fetchSpinner?.fail(
           chalk.red(
-            `❌ Failed to fetch ${chalk.cyan(`${componentWithoutVersion}@${resolvedVersion}`)}`,
+            `❌ Failed to fetch ${chalk.cyan(`${namespace}/${name}@${resolvedVersion}`)}`,
           ),
         );
       }

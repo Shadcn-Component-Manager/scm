@@ -5,7 +5,6 @@ import fs from "fs-extra";
 import inquirer from "inquirer";
 import ora from "ora";
 import path from "path";
-import { isReservedComponentName } from "../lib/constants.js";
 import { getGitHubUser } from "../lib/github.js";
 import {
   getComponentFileUrl,
@@ -13,6 +12,14 @@ import {
   getComponentRegistryUrl,
   resolveComponentVersion,
 } from "../lib/registry.js";
+import {
+  ensureWritableDirectory,
+  parseComponentName,
+  sanitizeFilename,
+  validateComponentName,
+  validateFileTargets,
+  withRetry,
+} from "../lib/utils.js";
 
 /**
  * Command to fork a component from the registry
@@ -27,29 +34,21 @@ export const fork = new Command()
   .option("-f, --force", "Overwrite existing directory")
   .option("-y, --yes", "Skip confirmation prompts")
   .action(async (componentName, options) => {
-    const versionMatch = componentName.match(/^(.+?)@(.+)$/);
-    const componentWithoutVersion = versionMatch
-      ? versionMatch[1]
-      : componentName;
-    const version = versionMatch ? versionMatch[2] : "latest";
+    const CWD = process.cwd();
 
-    const [namespace, name] = componentWithoutVersion.split("/");
-    if (!namespace || !name) {
-      console.error(
-        chalk.red(
-          "❌ Invalid component name. Use: <namespace>/<component>[@version]",
-        ),
-      );
+    const parsedComponent = parseComponentName(componentName);
+    if (!parsedComponent.isValid) {
+      console.error(chalk.red(`❌ ${parsedComponent.error}`));
       process.exit(1);
     }
 
-    const CWD = process.cwd();
+    const { namespace, name, version } = parsedComponent;
 
     const resolvedVersion = await resolveComponentVersion(
-      componentWithoutVersion,
+      `${namespace}/${name}`,
       version,
     );
-    const componentIdWithVersion = `${componentWithoutVersion}@${resolvedVersion}`;
+    const componentIdWithVersion = `${namespace}/${name}@${resolvedVersion}`;
 
     const componentUrl = getComponentRegistryUrl(
       namespace,
@@ -60,8 +59,13 @@ export const fork = new Command()
     const fetchSpinner = ora(
       `📦 Fetching ${chalk.cyan(componentIdWithVersion)}...`,
     ).start();
+
     try {
-      const { data: registryItem } = await axios.get(componentUrl);
+      const { data: registryItem } = await withRetry(
+        () => axios.get(componentUrl),
+        {},
+        `Fetch component ${componentIdWithVersion}`
+      );
       fetchSpinner.succeed(
         chalk.green(`✅ Fetched ${chalk.cyan(componentIdWithVersion)}`),
       );
@@ -83,20 +87,9 @@ export const fork = new Command()
         }
       }
 
-      if (isReservedComponentName(newComponentName)) {
-        console.error(
-          chalk.red(`❌ Component name "${newComponentName}" is reserved`),
-        );
-        console.error(
-          chalk.yellow(
-            "This name conflicts with an existing shadcn/ui component",
-          ),
-        );
-        console.error(
-          chalk.gray(
-            "Please choose a different name for your forked component",
-          ),
-        );
+      const newNameValidation = validateComponentName(newComponentName);
+      if (!newNameValidation.isValid) {
+        console.error(chalk.red(`❌ ${newNameValidation.error}`));
         process.exit(1);
       }
 
@@ -144,6 +137,14 @@ export const fork = new Command()
         }
       }
 
+      const dirCheck = await ensureWritableDirectory(
+        path.dirname(newComponentDir),
+      );
+      if (!dirCheck.success) {
+        console.error(chalk.red(`❌ ${dirCheck.error}`));
+        process.exit(1);
+      }
+
       const forkSpinner = ora(
         `🔀 Forking to ${chalk.cyan(`${newNamespace}/${newComponentName}`)}...`,
       ).start();
@@ -157,16 +158,25 @@ export const fork = new Command()
           resolvedVersion,
           file.path,
         );
-        const { data: fileContent } = await axios.get(fileUrl);
+        const { data: fileContent } = await withRetry(
+          () => axios.get(fileUrl),
+          {},
+          `Download file ${file.path}`
+        );
 
         const fileName = path.basename(file.path);
-        const newFilePath = path.join(newComponentDir, fileName);
+        const sanitizedFileName = sanitizeFilename(fileName);
+        const newFilePath = path.join(newComponentDir, sanitizedFileName);
         await fs.writeFile(newFilePath, fileContent);
       }
 
       const readmeUrl = getComponentReadmeUrl(namespace, name, resolvedVersion);
       try {
-        const { data: readmeContent } = await axios.get(readmeUrl);
+        const { data: readmeContent } = await withRetry(
+          () => axios.get(readmeUrl),
+          {},
+          `Download README for ${componentIdWithVersion}`
+        );
         await fs.writeFile(
           path.join(newComponentDir, "README.md"),
           readmeContent,
@@ -176,7 +186,7 @@ export const fork = new Command()
           options.description || registryItem.description;
         const basicReadme = `# ${newComponentName}
 
-This is a fork of ${componentWithoutVersion} by ${registryItem.author}.
+This is a fork of ${namespace}/${name} by ${registryItem.author}.
 
 ## Original Component
 - **Name**: ${registryItem.title || registryItem.name}
@@ -209,9 +219,18 @@ ${registryItem.description || ""}
         files:
           registryItem.files?.map((file: any) => ({
             ...file,
-            path: path.basename(file.path),
+            path: sanitizeFilename(path.basename(file.path)),
           })) || [],
       };
+
+      const fileValidation = validateFileTargets(newRegistryItem.files, CWD);
+      if (!fileValidation.isValid) {
+        forkSpinner.fail(chalk.red("❌ File validation failed"));
+        fileValidation.errors.forEach((error) =>
+          console.error(chalk.red(`  - ${error}`)),
+        );
+        process.exit(1);
+      }
 
       await fs.writeJson(
         path.join(newComponentDir, "registry.json"),

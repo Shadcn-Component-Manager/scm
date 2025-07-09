@@ -9,7 +9,7 @@ import semver from "semver";
 export interface VersionInfo {
   currentVersion: string;
   newVersion: string;
-  changeType: "patch" | "minor" | "major";
+  changeType: "patch" | "minor" | "major" | "manual";
   hasChanges: boolean;
 }
 
@@ -23,13 +23,21 @@ export async function detectVersionChanges(
   const spinner = ora("📊 Analyzing component changes...").start();
 
   try {
+    if (!semver.valid(currentVersion)) {
+      throw new Error(`Invalid current version: ${currentVersion}`);
+    }
+
     const files = await getAllFiles(componentPath);
     const fileHashes: Record<string, string> = {};
 
     for (const file of files) {
-      const content = await fs.readFile(file, "utf-8");
-      const hash = crypto.createHash("sha256").update(content).digest("hex");
-      fileHashes[path.relative(componentPath, file)] = hash;
+      try {
+        const content = await fs.readFile(file, "utf-8");
+        const hash = crypto.createHash("sha256").update(content).digest("hex");
+        fileHashes[path.relative(componentPath, file)] = hash;
+      } catch (error) {
+        console.warn(chalk.yellow(`⚠️  Could not read file: ${file}`));
+      }
     }
 
     const scmDir = path.join(os.homedir(), ".scm");
@@ -123,30 +131,44 @@ export async function detectVersionChanges(
  */
 async function getAllFiles(dir: string): Promise<string[]> {
   const files: string[] = [];
-  const items = await fs.readdir(dir);
 
-  for (const item of items) {
-    const fullPath = path.join(dir, item);
-    const stat = await fs.stat(fullPath);
+  try {
+    const items = await fs.readdir(dir);
 
-    if (stat.isDirectory()) {
-      if (item !== "node_modules" && item !== ".git" && !item.startsWith(".")) {
-        files.push(...(await getAllFiles(fullPath)));
-      }
-    } else {
-      if (
-        item.endsWith(".tsx") ||
-        item.endsWith(".ts") ||
-        item.endsWith(".js") ||
-        item.endsWith(".jsx") ||
-        item.endsWith(".json") ||
-        item.endsWith(".md") ||
-        item.endsWith(".css") ||
-        item.endsWith(".scss")
-      ) {
-        files.push(fullPath);
+    for (const item of items) {
+      const fullPath = path.join(dir, item);
+
+      try {
+        const stat = await fs.stat(fullPath);
+
+        if (stat.isDirectory()) {
+          if (
+            item !== "node_modules" &&
+            item !== ".git" &&
+            !item.startsWith(".")
+          ) {
+            files.push(...(await getAllFiles(fullPath)));
+          }
+        } else {
+          if (
+            item.endsWith(".tsx") ||
+            item.endsWith(".ts") ||
+            item.endsWith(".js") ||
+            item.endsWith(".jsx") ||
+            item.endsWith(".json") ||
+            item.endsWith(".md") ||
+            item.endsWith(".css") ||
+            item.endsWith(".scss")
+          ) {
+            files.push(fullPath);
+          }
+        }
+      } catch (error) {
+        console.warn(chalk.yellow(`⚠️  Could not access: ${fullPath}`));
       }
     }
+  } catch (error) {
+    console.warn(chalk.yellow(`⚠️  Could not read directory: ${dir}`));
   }
 
   return files;
@@ -192,6 +214,9 @@ export function validateVersion(version: string): boolean {
  * Compares two version strings
  */
 export function compareVersions(v1: string, v2: string): number {
+  if (!semver.valid(v1) || !semver.valid(v2)) {
+    throw new Error("Invalid version strings provided");
+  }
   return semver.compare(v1, v2);
 }
 
@@ -199,5 +224,34 @@ export function compareVersions(v1: string, v2: string): number {
  * Checks if version v1 is greater than v2
  */
 export function isVersionGreater(v1: string, v2: string): boolean {
+  if (!semver.valid(v1) || !semver.valid(v2)) {
+    throw new Error("Invalid version strings provided");
+  }
   return semver.gt(v1, v2);
+}
+
+/**
+ * Gets the latest version from a list of versions
+ */
+export function getLatestVersion(versions: string[]): string | null {
+  const validVersions = versions.filter((v) => semver.valid(v));
+  if (validVersions.length === 0) {
+    return null;
+  }
+
+  return validVersions.sort(semver.compare).pop() || null;
+}
+
+/**
+ * Increments a version by the specified type
+ */
+export function incrementVersion(
+  version: string,
+  type: "patch" | "minor" | "major",
+): string | null {
+  if (!semver.valid(version)) {
+    throw new Error(`Invalid version: ${version}`);
+  }
+
+  return semver.inc(version, type);
 }

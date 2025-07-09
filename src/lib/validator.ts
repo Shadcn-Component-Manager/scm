@@ -50,12 +50,39 @@ export async function validateComponent(
         const filePath = path.join(componentPath, file.path);
         if (!(await fs.pathExists(filePath))) {
           errors.push(`File not found: ${file.path}`);
+        } else {
+          try {
+            await fs.access(filePath, fs.constants.R_OK);
+          } catch (error) {
+            errors.push(`File not readable: ${file.path}`);
+          }
         }
       }
     }
 
+    if (itemToValidate.name) {
+      const namePattern = /^[a-zA-Z0-9_-]+$/;
+      if (!namePattern.test(itemToValidate.name)) {
+        errors.push(
+          "Component name can only contain letters, numbers, hyphens, and underscores",
+        );
+      }
+    }
+
+    if (
+      "version" in itemToValidate &&
+      itemToValidate.version &&
+      typeof itemToValidate.version === "string"
+    ) {
+      const versionPattern =
+        /^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$/;
+      if (!versionPattern.test(itemToValidate.version)) {
+        errors.push("Version must be in semver format (e.g., 1.0.0)");
+      }
+    }
+
     if (errors.length > 0) {
-      spinner.fail(chalk.red("❌ Validation failed: Missing files"));
+      spinner.fail(chalk.red("❌ Validation failed"));
       return { isValid: false, errors };
     }
 
@@ -102,6 +129,11 @@ export async function validateRegistryJson(
   const errors: string[] = [];
 
   try {
+    if (!(await fs.pathExists(registryPath))) {
+      errors.push("Registry file does not exist");
+      return { isValid: false, errors };
+    }
+
     const content = await fs.readJson(registryPath);
     const validation = registryItemSchema.safeParse(content);
 
@@ -117,4 +149,38 @@ export async function validateRegistryJson(
     errors.push(`Failed to parse registry.json: ${error}`);
     return { isValid: false, errors };
   }
+}
+
+/**
+ * Validates component dependencies
+ */
+export function validateDependencies(
+  dependencies: string[] = [],
+  registryDependencies: string[] = [],
+): { isValid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  for (const dep of dependencies) {
+    if (typeof dep !== "string" || dep.trim().length === 0) {
+      errors.push("Invalid npm dependency: must be a non-empty string");
+    }
+  }
+
+  for (const dep of registryDependencies) {
+    if (typeof dep !== "string" || dep.trim().length === 0) {
+      errors.push("Invalid registry dependency: must be a non-empty string");
+    } else {
+      const parts = dep.split("/");
+      if (parts.length !== 2) {
+        errors.push(
+          `Invalid registry dependency format: ${dep}. Use: namespace/component`,
+        );
+      }
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
 }

@@ -1,6 +1,7 @@
 import axios from "axios";
 import { z } from "zod";
 import { REGISTRY_INDEX_URL, REGISTRY_URL } from "./constants.js";
+import { withRetry } from "./utils.js";
 
 /**
  * Schema for a single file in the registry
@@ -191,7 +192,11 @@ export async function resolveComponentVersion(
   }
 
   try {
-    const { data: index } = await axios.get(REGISTRY_INDEX_URL);
+    const { data: index } = await withRetry(
+      () => axios.get(REGISTRY_INDEX_URL),
+      {},
+      "Fetch registry index for version resolution"
+    );
     const component = (index as any[]).find(
       (item) => item.name === componentName,
     );
@@ -199,7 +204,6 @@ export async function resolveComponentVersion(
       return component.version;
     }
   } catch (error) {
-    // Fall through to returning "latest"
   }
 
   return "latest";

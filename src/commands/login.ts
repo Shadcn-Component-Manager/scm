@@ -122,6 +122,7 @@ export const logoutCmd = new Command()
   .option("-a, --all", "Clear all cached data (not just token)")
   .option("-c, --cache", "Clear cache only")
   .option("-f, --force", "Force logout without confirmation")
+  .option("-v, --verbose", "Show detailed information")
   .action(async (options) => {
     try {
       if (options.cache) {
