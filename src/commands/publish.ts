@@ -58,13 +58,29 @@ export const publish = new Command()
     try {
       const registryJson = await fs.readJson(registryJsonPath);
 
-      const registryValidation = registrySchema.safeParse(registryJson);
-
       let selectedItem;
       let componentName;
       let files;
 
-      if (registryValidation.success) {
+      if (registryJson.items && Array.isArray(registryJson.items)) {
+        const registryValidation = registrySchema.safeParse(registryJson);
+        
+        if (!registryValidation.success) {
+          spinner.fail(chalk.red("❌ Invalid registry collection"));
+          console.error(chalk.red("Validation errors:"));
+          registryValidation.error.issues.forEach((issue) => {
+            console.error(
+              chalk.red(`  - ${issue.path.join(".")}: ${issue.message}`),
+            );
+          });
+          process.exit(1);
+        }
+
+        spinner.succeed(
+          chalk.green(
+            `✅ Found registry collection: ${chalk.cyan(registryJson.name)}`,
+          ),
+        );
         spinner.succeed(
           chalk.green(
             `✅ Found registry collection: ${chalk.cyan(registryJson.name)}`,
@@ -135,7 +151,7 @@ export const publish = new Command()
         const itemValidation = registryItemSchema.safeParse(registryJson);
 
         if (!itemValidation.success) {
-          spinner.fail(chalk.red("❌ Invalid registry.json file"));
+          spinner.fail(chalk.red("❌ Invalid registry item"));
           console.error(chalk.red("Validation errors:"));
           itemValidation.error.issues.forEach((issue) => {
             console.error(

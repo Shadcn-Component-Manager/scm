@@ -139,6 +139,7 @@ export const cssSchema = z
  * Based on https://ui.shadcn.com/schema/registry-item.json
  */
 export const registryItemSchema = z.object({
+  $schema: z.string().optional().describe("The schema URL for the registry item"),
   name: z
     .string()
     .min(1, "Name cannot be empty")
@@ -233,6 +234,7 @@ export const registryItemSchema = z.object({
  * Based on https://ui.shadcn.com/schema/registry.json
  */
 export const registrySchema = z.object({
+  $schema: z.string().optional().describe("The schema URL for the registry"),
   name: z.string().describe("The name of your registry"),
   homepage: z.string().describe("The homepage of your registry"),
   items: z.array(registryItemSchema).describe("The items in your registry"),
