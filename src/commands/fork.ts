@@ -64,7 +64,7 @@ export const fork = new Command()
       const { data: registryItem } = await withRetry(
         () => axios.get(componentUrl),
         {},
-        `Fetch component ${componentIdWithVersion}`
+        `Fetch component ${componentIdWithVersion}`,
       );
       fetchSpinner.succeed(
         chalk.green(`✅ Fetched ${chalk.cyan(componentIdWithVersion)}`),
@@ -108,6 +108,18 @@ export const fork = new Command()
             type: "input",
             name: "namespace",
             message: "Enter your GitHub username:",
+            validate: (input: string) => {
+              if (!input || input.trim().length === 0) {
+                return "GitHub username is required";
+              }
+              if (!/^[a-zA-Z0-9_-]+$/.test(input)) {
+                return "GitHub username can only contain letters, numbers, hyphens, and underscores";
+              }
+              if (input.length < 1 || input.length > 39) {
+                return "GitHub username must be between 1 and 39 characters";
+              }
+              return true;
+            },
           },
         ] as any);
         newNamespace = inputNamespace;
@@ -161,7 +173,7 @@ export const fork = new Command()
         const { data: fileContent } = await withRetry(
           () => axios.get(fileUrl),
           {},
-          `Download file ${file.path}`
+          `Download file ${file.path}`,
         );
 
         const fileName = path.basename(file.path);
@@ -175,7 +187,7 @@ export const fork = new Command()
         const { data: readmeContent } = await withRetry(
           () => axios.get(readmeUrl),
           {},
-          `Download README for ${componentIdWithVersion}`
+          `Download README for ${componentIdWithVersion}`,
         );
         await fs.writeFile(
           path.join(newComponentDir, "README.md"),

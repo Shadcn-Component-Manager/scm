@@ -1,7 +1,23 @@
 import axios from "axios";
 import { z } from "zod";
-import { REGISTRY_INDEX_URL, REGISTRY_URL } from "./constants.js";
+import {
+  ALLOWED_PROTOCOLS,
+  REGISTRY_INDEX_URL,
+  REGISTRY_URL,
+} from "./constants.js";
 import { withRetry } from "./utils.js";
+
+/**
+ * Validates that a URL uses HTTPS protocol
+ */
+function validateHttpsUrl(url: string): boolean {
+  try {
+    const urlObj = new URL(url);
+    return ALLOWED_PROTOCOLS.includes(urlObj.protocol);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Schema for a single file in the registry
@@ -10,6 +26,21 @@ export const registryItemFileSchema = z
   .object({
     path: z
       .string()
+      .min(1, "File path cannot be empty")
+      .max(500, "File path too long")
+      .refine((path) => {
+        const dangerousPatterns = [
+          /\.\./,
+          /\\/,
+          /^\/+/,
+          /~+/,
+          /\$\{/,
+          /<script/i,
+          /javascript:/i,
+          /data:text\/html/i,
+        ];
+        return !dangerousPatterns.some((pattern) => pattern.test(path));
+      }, "File path contains potentially dangerous content")
       .describe("The path to the file relative to the registry root"),
     content: z.string().optional().describe("The content of the file"),
     type: z
@@ -28,6 +59,24 @@ export const registryItemFileSchema = z
     target: z
       .string()
       .optional()
+      .refine((target) => {
+        if (!target) return true;
+        const dangerousPatterns = [
+          /\.\./,
+          /\\/,
+          /^\/+/,
+          /~+/,
+          /\$\{/,
+          /node_modules/,
+          /\.git/,
+          /\.env/,
+          /package\.json/,
+          /package-lock\.json/,
+          /yarn\.lock/,
+          /pnpm-lock\.yaml/,
+        ];
+        return !dangerousPatterns.some((pattern) => pattern.test(target));
+      }, "Target path contains potentially dangerous content")
       .describe("The target path of the file in the project"),
   })
   .refine(
@@ -92,6 +141,12 @@ export const cssSchema = z
 export const registryItemSchema = z.object({
   name: z
     .string()
+    .min(1, "Name cannot be empty")
+    .max(50, "Name too long")
+    .regex(
+      /^[a-z][a-z0-9-]*[a-z0-9]$/,
+      "Name must start with a letter, contain only lowercase letters, numbers, and hyphens, and end with a letter or number",
+    )
     .describe(
       "The name of the item. This is used to identify the item in the registry",
     ),
@@ -110,30 +165,37 @@ export const registryItemSchema = z.object({
     .describe("The type of the item"),
   title: z
     .string()
+    .max(200, "Title too long")
     .optional()
     .describe("A human-readable title for your registry item"),
   description: z
     .string()
+    .max(1000, "Description too long")
     .optional()
     .describe("A description of your registry item"),
   author: z
     .string()
+    .max(200, "Author too long")
     .optional()
     .describe("The author of the item. Recommended format: username <url>"),
   dependencies: z
-    .array(z.string())
+    .array(z.string().max(100, "Dependency name too long"))
+    .max(100, "Too many dependencies")
     .optional()
     .describe("An array of NPM dependencies required by the registry item"),
   devDependencies: z
-    .array(z.string())
+    .array(z.string().max(100, "Dev dependency name too long"))
+    .max(100, "Too many dev dependencies")
     .optional()
     .describe("An array of NPM dev dependencies required by the registry item"),
   registryDependencies: z
-    .array(z.string())
+    .array(z.string().max(100, "Registry dependency name too long"))
+    .max(100, "Too many registry dependencies")
     .optional()
     .describe("An array of registry items that this item depends on"),
   files: z
     .array(registryItemFileSchema)
+    .max(50, "Too many files")
     .optional()
     .describe("The main payload of the registry item"),
   cssVars: cssVarsSchema
@@ -154,7 +216,8 @@ export const registryItemSchema = z.object({
     .optional()
     .describe("The documentation for the registry item"),
   categories: z
-    .array(z.string())
+    .array(z.string().max(50, "Category name too long"))
+    .max(20, "Too many categories")
     .optional()
     .describe("The categories of the registry item"),
   extends: z
@@ -195,7 +258,7 @@ export async function resolveComponentVersion(
     const { data: index } = await withRetry(
       () => axios.get(REGISTRY_INDEX_URL),
       {},
-      "Fetch registry index for version resolution"
+      "Fetch registry index for version resolution",
     );
     const component = (index as any[]).find(
       (item) => item.name === componentName,
@@ -203,8 +266,7 @@ export async function resolveComponentVersion(
     if (component?.version) {
       return component.version;
     }
-  } catch (error) {
-  }
+  } catch (error) {}
 
   return "latest";
 }
@@ -217,7 +279,11 @@ export function getComponentRegistryUrl(
   name: string,
   version: string,
 ): string {
-  return `${REGISTRY_URL}/${namespace}/${name}/${version}/registry.json`;
+  const url = `${REGISTRY_URL}/${namespace}/${name}/${version}/registry.json`;
+  if (!validateHttpsUrl(url)) {
+    throw new Error("Invalid registry URL - only HTTPS is allowed");
+  }
+  return url;
 }
 
 /**
@@ -228,7 +294,11 @@ export function getComponentReadmeUrl(
   name: string,
   version: string,
 ): string {
-  return `${REGISTRY_URL}/${namespace}/${name}/${version}/README.md`;
+  const url = `${REGISTRY_URL}/${namespace}/${name}/${version}/README.md`;
+  if (!validateHttpsUrl(url)) {
+    throw new Error("Invalid registry URL - only HTTPS is allowed");
+  }
+  return url;
 }
 
 /**
@@ -240,5 +310,9 @@ export function getComponentFileUrl(
   version: string,
   filePath: string,
 ): string {
-  return `${REGISTRY_URL}/${namespace}/${name}/${version}/${filePath}`;
+  const url = `${REGISTRY_URL}/${namespace}/${name}/${version}/${filePath}`;
+  if (!validateHttpsUrl(url)) {
+    throw new Error("Invalid registry URL - only HTTPS is allowed");
+  }
+  return url;
 }

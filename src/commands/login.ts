@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import { Command } from "commander";
 import inquirer from "inquirer";
-import { readConfig, writeConfig } from "../lib/config.js";
+import { getSecureToken, readConfig, setSecureToken } from "../lib/config.js";
 import {
   authenticateWithGitHub,
   logout,
@@ -23,19 +23,18 @@ export const login = new Command()
       const config = await readConfig();
 
       if (options.check) {
-        if (!config.token) {
+        const token = getSecureToken();
+        if (!token) {
           console.log(chalk.red("❌ Not logged in"));
           console.log(chalk.yellow("Run 'scm login' to authenticate"));
           return;
         }
 
-        const isValid = await validateToken(config.token);
+        const isValid = await validateToken(token);
         if (isValid) {
           console.log(chalk.green("✅ Authentication status: Valid"));
           if (options.verbose) {
-            console.log(
-              chalk.gray(`Token: ${config.token.substring(0, 8)}...`),
-            );
+            console.log(chalk.gray(`Token: ${token.substring(0, 8)}...`));
           }
         } else {
           console.log(chalk.red("❌ Authentication status: Invalid"));
@@ -55,8 +54,7 @@ export const login = new Command()
           process.exit(1);
         }
 
-        config.token = options.token;
-        await writeConfig(config);
+        setSecureToken(options.token);
 
         console.log(
           chalk.green("✅ Successfully authenticated with provided token"),
@@ -67,13 +65,14 @@ export const login = new Command()
         return;
       }
 
-      if (config.token && !options.force) {
-        const isValid = await validateToken(config.token);
+      const existingToken = getSecureToken();
+      if (existingToken && !options.force) {
+        const isValid = await validateToken(existingToken);
         if (isValid) {
           console.log(chalk.green("✅ Already logged in to GitHub"));
           if (options.verbose) {
             console.log(
-              chalk.gray(`Token: ${config.token.substring(0, 8)}...`),
+              chalk.gray(`Token: ${existingToken.substring(0, 8)}...`),
             );
           }
           console.log(chalk.blue("Use --force to re-authenticate"));
@@ -99,8 +98,7 @@ export const login = new Command()
 
       const token = await authenticateWithGitHub();
 
-      config.token = token;
-      await writeConfig(config);
+      setSecureToken(token);
 
       console.log(chalk.green("✅ Successfully authenticated with GitHub"));
       if (options.verbose) {

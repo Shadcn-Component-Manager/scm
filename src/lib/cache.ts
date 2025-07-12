@@ -66,6 +66,7 @@ export class Cache {
       };
       const cacheFile = this.getCacheFilePath(key);
       await fs.writeJson(cacheFile, entry, { spaces: 2 });
+      await fs.chmod(cacheFile, 0o600);
     } catch (error) {
       console.error(
         chalk.yellow(`⚠️  Failed to cache data for key ${key}:`, error),
@@ -130,7 +131,7 @@ export class Cache {
    * Returns the cache file path for a given key
    */
   private getCacheFilePath(key: string): string {
-    const hash = crypto.createHash("md5").update(key).digest("hex");
+    const hash = crypto.createHash("sha256").update(key).digest("hex");
     return path.join(CACHE_DIR, `${hash}.json`);
   }
 }

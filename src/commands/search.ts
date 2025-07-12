@@ -32,11 +32,7 @@ export const search = new Command()
   .option("-c, --category <category>", "Filter by category")
   .option("-l, --limit <number>", "Limit results", "10")
   .option("-a, --author <author>", "Filter by author")
-  .option(
-    "-s, --sort <field>",
-    "Sort by (name, author, date)",
-    "name",
-  )
+  .option("-s, --sort <field>", "Sort by (name, author, date)", "name")
   .option("-o, --output <format>", "Output format (table, json, csv)", "table")
   .option(
     "-t, --type <type>",
@@ -101,7 +97,7 @@ export const search = new Command()
           const { data } = await withRetry(
             () => axios.get(REGISTRY_INDEX_URL),
             {},
-            "Fetch registry index"
+            "Fetch registry index",
           );
           registryIndex = data;
           await setCachedRegistryIndex(data);
@@ -118,7 +114,7 @@ export const search = new Command()
         const { data } = await withRetry(
           () => axios.get(REGISTRY_INDEX_URL),
           {},
-          "Fetch registry index"
+          "Fetch registry index",
         );
         registryIndex = data;
         await setCachedRegistryIndex(data);

@@ -107,6 +107,7 @@ export async function detectVersionChanges(
       : {};
     allHashes[componentKey] = fileHashes;
     await fs.writeJson(hashFile, allHashes, { spaces: 2 });
+    await fs.chmod(hashFile, 0o600);
 
     spinner.succeed(
       chalk.green(

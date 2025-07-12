@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import { Octokit } from "octokit";
 import ora from "ora";
-import { readConfig, writeConfig } from "./config.js";
+import { getSecureToken, setSecureToken } from "./config.js";
 import {
   GITHUB_CLIENT_ID,
   GITHUB_SCOPES,
@@ -20,12 +20,12 @@ export async function getOctokit(): Promise<Octokit> {
     return octokit;
   }
 
-  const config = await readConfig();
-  if (!config.token) {
+  const token = getSecureToken();
+  if (!token) {
     throw new Error("You are not logged in. Please run `scm login` first");
   }
 
-  octokit = new Octokit({ auth: config.token });
+  octokit = new Octokit({ auth: token });
   return octokit;
 }
 
@@ -49,9 +49,7 @@ export async function getGitHubUser() {
 
       const token = await authenticateWithGitHub();
 
-      const config = await readConfig();
-      config.token = token;
-      await writeConfig(config);
+      setSecureToken(token);
 
       octokit = null;
 
@@ -71,9 +69,7 @@ export async function authenticateWithGitHub(): Promise<string> {
   const spinner = ora("🔐 Starting GitHub OAuth device flow...").start();
 
   try {
-    const config = await readConfig();
-    config.token = undefined;
-    await writeConfig(config);
+    setSecureToken("");
     octokit = null;
 
     spinner.text = "🔄 Requesting device authorization...";
@@ -255,9 +251,7 @@ export async function validateToken(token: string): Promise<boolean> {
  * Logs out the current user by clearing stored token
  */
 export async function logout(): Promise<void> {
-  const config = await readConfig();
-  config.token = undefined;
-  await writeConfig(config);
+  setSecureToken("");
   octokit = null;
 }
 

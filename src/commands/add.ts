@@ -118,7 +118,7 @@ export const add = new Command()
           const { data } = await withRetry(
             () => axios.get(componentUrl),
             {},
-            `Fetch component ${componentIdWithVersion}`
+            `Fetch component ${componentIdWithVersion}`,
           );
           registryItem = data;
           await setCachedComponent(namespace, name, data);
@@ -141,7 +141,7 @@ export const add = new Command()
         const { data } = await withRetry(
           () => axios.get(componentUrl),
           {},
-          `Fetch component ${componentIdWithVersion}`
+          `Fetch component ${componentIdWithVersion}`,
         );
         registryItem = data;
         await setCachedComponent(namespace, name, data);
@@ -254,7 +254,7 @@ export const add = new Command()
           const { data: fileContent } = await withRetry(
             () => axios.get(fileUrl),
             {},
-            `Download file ${file.path}`
+            `Download file ${file.path}`,
           );
 
           const validatedContent = validateFileContent(fileContent, file.path);
@@ -294,7 +294,6 @@ export const add = new Command()
           await fs.writeFile(installPath, validatedContent);
           installedFiles.push(installPath);
         }
-
       } catch (error) {
         for (const filePath of installedFiles) {
           try {
@@ -389,6 +388,29 @@ export const add = new Command()
             if (checkCircular(dep)) {
               console.error(
                 chalk.red(`❌ Circular dependency detected: ${dep}`),
+              );
+              continue;
+            }
+
+            const parsedDep = parseComponentName(dep);
+            if (!parsedDep.isValid) {
+              console.error(
+                chalk.red(`❌ Invalid registry dependency: ${dep}`),
+              );
+              continue;
+            }
+
+            if (
+              dep.includes(";") ||
+              dep.includes("&") ||
+              dep.includes("|") ||
+              dep.includes("`") ||
+              dep.includes("$")
+            ) {
+              console.error(
+                chalk.red(
+                  `❌ Potentially dangerous registry dependency: ${dep}`,
+                ),
               );
               continue;
             }
@@ -493,7 +515,23 @@ function getInstallCommand(
   packageManager: string,
   dependencies: string[],
 ): string {
-  const deps = dependencies.join(" ");
+  const sanitizedDeps = dependencies.map((dep) => {
+    if (!/^[a-zA-Z0-9@/._-]+$/.test(dep)) {
+      throw new Error(`Invalid dependency name: ${dep}`);
+    }
+    if (
+      dep.includes(";") ||
+      dep.includes("&") ||
+      dep.includes("|") ||
+      dep.includes("`") ||
+      dep.includes("$")
+    ) {
+      throw new Error(`Potentially dangerous dependency name: ${dep}`);
+    }
+    return dep;
+  });
+
+  const deps = sanitizedDeps.join(" ");
 
   switch (packageManager) {
     case "pnpm":
@@ -543,6 +581,7 @@ async function trackInstalledComponent(
     };
 
     await fs.writeJson(trackingPath, tracking, { spaces: 2 });
+    await fs.chmod(trackingPath, 0o600);
   } catch (error) {
     console.warn(chalk.yellow("⚠️  Failed to track installed component"));
   }

@@ -45,14 +45,70 @@ export async function validateComponent(
       itemToValidate = validation.data;
     }
 
+    if (itemToValidate.name) {
+      const namePattern = /^[a-z][a-z0-9-]*[a-z0-9]$/;
+      if (!namePattern.test(itemToValidate.name)) {
+        errors.push(
+          "Component name must start with a letter, contain only lowercase letters, numbers, and hyphens, and end with a letter or number",
+        );
+      }
+
+      const reservedNames = [
+        "node_modules",
+        "package",
+        "package.json",
+        "components",
+        "lib",
+        "src",
+        "dist",
+        "build",
+        "test",
+        "tests",
+        "docs",
+        "examples",
+        "config",
+        "index",
+        "main",
+        "app",
+        "utils",
+        "types",
+        "interfaces",
+        "constants",
+      ];
+
+      if (reservedNames.includes(itemToValidate.name.toLowerCase())) {
+        errors.push(
+          `Component name '${itemToValidate.name}' is reserved and cannot be used`,
+        );
+      }
+    }
+
     if (itemToValidate.files && itemToValidate.files.length > 0) {
       for (const file of itemToValidate.files) {
         const filePath = path.join(componentPath, file.path);
+
+        if (
+          file.path.includes("..") ||
+          file.path.includes("\\") ||
+          file.path.startsWith("/")
+        ) {
+          errors.push(`Unsafe file path detected: ${file.path}`);
+          continue;
+        }
+
         if (!(await fs.pathExists(filePath))) {
           errors.push(`File not found: ${file.path}`);
         } else {
           try {
             await fs.access(filePath, fs.constants.R_OK);
+
+            const stats = await fs.stat(filePath);
+            const maxSize = 1024 * 1024 * 100;
+            if (stats.size > maxSize) {
+              errors.push(
+                `File too large: ${file.path} (${stats.size} bytes, max ${maxSize})`,
+              );
+            }
           } catch (error) {
             errors.push(`File not readable: ${file.path}`);
           }

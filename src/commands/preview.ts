@@ -9,7 +9,11 @@ import {
   getComponentRegistryUrl,
   resolveComponentVersion,
 } from "../lib/registry.js";
-import { parseComponentName, validateVersion, withRetry } from "../lib/utils.js";
+import {
+  parseComponentName,
+  validateVersion,
+  withRetry,
+} from "../lib/utils.js";
 
 /**
  * Command to preview a component from the registry
@@ -82,7 +86,7 @@ export const preview = new Command()
         const { data } = await withRetry(
           () => axios.get(componentUrl),
           {},
-          `Fetch component ${namespace}/${name}@${resolvedVersion}`
+          `Fetch component ${namespace}/${name}@${resolvedVersion}`,
         );
         registryItem = data;
         await setCachedComponent(namespace, name, data);
@@ -112,7 +116,7 @@ export const preview = new Command()
           const { data: fileContent } = await withRetry(
             () => axios.get(fileUrl),
             {},
-            `Download file ${file.path}`
+            `Download file ${file.path}`,
           );
           console.log(`// ${file.path}`);
           console.log(fileContent);
@@ -267,7 +271,7 @@ export const preview = new Command()
         const { data: readmeContent } = await withRetry(
           () => axios.get(readmeUrl),
           {},
-          `Download README for ${namespace}/${name}@${resolvedVersion}`
+          `Download README for ${namespace}/${name}@${resolvedVersion}`,
         );
         console.log(chalk.bold("\n📖 README:"));
         console.log(chalk.gray("─".repeat(50)));

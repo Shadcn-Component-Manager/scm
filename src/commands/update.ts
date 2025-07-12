@@ -7,7 +7,11 @@ import ora from "ora";
 import path from "path";
 import { REGISTRY_INDEX_URL } from "../lib/constants.js";
 import { getComponentRegistryUrl } from "../lib/registry.js";
-import { parseComponentName, validateVersion, withRetry } from "../lib/utils.js";
+import {
+  parseComponentName,
+  validateVersion,
+  withRetry,
+} from "../lib/utils.js";
 import { isVersionGreater } from "../lib/versioning.js";
 
 /**
@@ -388,7 +392,7 @@ async function getLatestVersion(
     const { data: index } = await withRetry(
       () => axios.get(REGISTRY_INDEX_URL),
       {},
-      "Fetch registry index"
+      "Fetch registry index",
     );
 
     const component = index.find(
@@ -403,7 +407,7 @@ async function getLatestVersion(
     const { data: registryItem } = await withRetry(
       () => axios.get(componentUrl),
       {},
-      `Fetch component ${namespace}/${name}`
+      `Fetch component ${namespace}/${name}`,
     );
 
     return registryItem.version || null;

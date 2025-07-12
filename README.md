@@ -24,7 +24,7 @@ scm create my-awesome-button
 scm publish
 
 # Install components from others
-scm add user/button
+scm add shadcn/button
 ```
 
 ## Commands
@@ -111,11 +111,11 @@ Add a component to your project.
 **Examples:**
 
 ```bash
-scm add user/button
-scm add user/button@1.0.0
-scm add user/button --force
-scm add user/button --dry-run
-scm add user/button --skip-deps
+scm add shadcn/button
+scm add shadcn/button@1.0.0
+scm add shadcn/button --force
+scm add shadcn/button --dry-run
+scm add shadcn/button --skip-deps
 ```
 
 #### `scm publish`
@@ -156,11 +156,11 @@ Update an installed component to the latest version.
 
 ```bash
 scm update
-scm update user/button
+scm update shadcn/button
 scm update --all
 scm update --check-only
 scm update --interactive
-scm update user/button --version 2.0.0
+scm update shadcn/button --version 2.0.0
 ```
 
 ### Discovery
@@ -207,11 +207,11 @@ Preview a component from the registry.
 **Examples:**
 
 ```bash
-scm preview user/button
-scm preview user/button@1.0.0
-scm preview user/button --output json
-scm preview user/button --code
-scm preview user/button --dependencies
+scm preview shadcn/button
+scm preview shadcn/button@1.0.0
+scm preview shadcn/button --output json
+scm preview shadcn/button --code
+scm preview shadcn/button --dependencies
 ```
 
 #### `scm fork <component-name>`
@@ -229,37 +229,28 @@ Fork a component from the registry.
 **Examples:**
 
 ```bash
-scm fork user/button
-scm fork user/button@1.0.0
-scm fork user/button --name my-button
-scm fork user/button --description "My custom button variant"
+scm fork shadcn/button
+scm fork shadcn/button@1.0.0
+scm fork shadcn/button --name my-button
+scm fork shadcn/button --description "My custom button variant"
 ```
 
 ## Component Structure
 
-Your component should have this structure:
+SCM uses the **standard shadcn/ui registry.json format**. Build your component using the regular shadcn/ui structure, then publish via SCM.
 
-```
-my-component/
-├── registry.json    # Component metadata
-├── MyComponent.tsx  # Main component file
-├── useMyComponent.ts # Hook (optional)
-├── styles.css       # Styles (optional)
-└── README.md        # Documentation (optional)
-```
-
-### registry.json Example
+### registry.json Example (shadcn/ui format)
 
 ```json
 {
   "name": "my-button",
-  "type": "registry:component",
+  "type": "registry:ui",
   "title": "My Awesome Button",
   "description": "A beautiful button component with multiple variants",
   "files": [
     {
       "path": "MyButton.tsx",
-      "type": "registry:component"
+      "type": "registry:ui"
     },
     {
       "path": "useMyButton.ts",
@@ -267,44 +258,18 @@ my-component/
     }
   ],
   "dependencies": ["react@^18.0.0", "lucide-react@^0.3.0"],
-  "registryDependencies": ["button"],
-  "version": "1.0.0",
+  "registryDependencies": ["shadcn/button"],
   "author": "Your Name <your-email@example.com>",
   "categories": ["ui", "button"]
 }
 ```
 
-## CSS Variables Support
+### Workflow
 
-Components can include CSS variables that are automatically applied:
-
-```json
-{
-  "cssVars": {
-    "theme": {
-      "font-heading": "Poppins, sans-serif"
-    },
-    "light": {
-      "brand": "20 14.3% 4.1%"
-    },
-    "dark": {
-      "brand": "20 14.3% 4.1%"
-    }
-  }
-}
-```
-
-## Reserved Component Names
-
-SCM automatically detects reserved component names that conflict with official shadcn/ui components:
-
-- Core UI: `button`, `card`, `dialog`, `input`, `form`, etc.
-- Blocks: `dashboard-01`, `sidebar-01`, `login-01`, etc.
-- Charts: `chart-area-default`, `chart-bar-default`, etc.
-- Calendar: `calendar-01`, `calendar-02`, etc.
-- Themes: `theme-daylight`, `theme-midnight`, etc.
-
-**Note**: Reserved component names automatically redirect to `shadcn add` to ensure you get the official shadcn/ui component.
+1. **Create**: Use `scm create` to generate a component with proper shadcn/ui structure
+2. **Develop**: Build your component using standard shadcn/ui patterns
+3. **Publish**: Use `scm publish` to upload to the community registry
+4. **Share**: Others can install with `scm add username/component-name`
 
 ## Registry Structure
 
@@ -312,14 +277,18 @@ The community registry follows this structure:
 
 ```
 components/
-├── username/
-│   └── component-name/
-│       ├── 1.0.0/
-│       │   ├── registry.json
-│       │   ├── Component.tsx
-│       │   └── README.md
-│       └── 1.1.0/
-│           └── ...
+├── {github-username}/          # User namespace (GitHub username)
+│   ├── {component-name}/       # Component directory
+│   │   ├── 1.0.0/             # Version directory (semver)
+│   │   │   ├── registry.json  # Component metadata
+│   │   │   ├── README.md      # Documentation
+│   │   │   └── registry/      # Component files directory
+│   │   │       ├── ui/        # UI components
+│   │   │       ├── hooks/     # React hooks
+│   │   │       ├── lib/       # Utilities and types
+│   │   │       └── ...        # Other file types
+│   │   └── 1.1.0/             # Newer version
+│   └── another-component/
 └── another-user/
     └── ...
 ```
@@ -335,7 +304,7 @@ components/
 
 ## Contributing
 
-1. Fork a component: `scm fork user/component`
+1. Fork a component: `scm fork shadcn/component`
 2. Make your changes: Modify the component files
 3. Publish your version: `scm publish`
 4. Submit PR: Your component will be reviewed and merged

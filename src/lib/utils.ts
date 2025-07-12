@@ -1,6 +1,8 @@
+import chalk from "chalk";
 import fs from "fs-extra";
 import inquirer from "inquirer";
 import path from "path";
+import { MAX_FILE_SIZE } from "./constants.js";
 
 /**
  * Validates if a file target is safe to write
@@ -10,14 +12,30 @@ export function isSafeTarget(target: string, cwd: string): boolean {
     return false;
   }
 
-  const resolvedPath = path.resolve(cwd, target);
-  const normalizedCwd = path.resolve(cwd);
+  const normalizedTarget = path.normalize(target);
+  const normalizedCwd = path.normalize(cwd);
+
+  if (
+    normalizedTarget.includes("..") ||
+    normalizedTarget.includes("\\") ||
+    normalizedTarget.startsWith("/") ||
+    normalizedTarget.includes("~") ||
+    normalizedTarget.includes("$")
+  ) {
+    return false;
+  }
+
+  const resolvedPath = path.resolve(cwd, normalizedTarget);
 
   return (
     resolvedPath.startsWith(normalizedCwd) &&
-    !resolvedPath.includes("..") &&
     !resolvedPath.includes("node_modules") &&
-    !resolvedPath.includes(".git")
+    !resolvedPath.includes(".git") &&
+    !resolvedPath.includes(".env") &&
+    !resolvedPath.includes("package.json") &&
+    !resolvedPath.includes("package-lock.json") &&
+    !resolvedPath.includes("yarn.lock") &&
+    !resolvedPath.includes("pnpm-lock.yaml")
   );
 }
 
@@ -32,19 +50,56 @@ export function validateComponentName(componentName: string): {
     return { isValid: false, error: "Component name is required" };
   }
 
-  const namePattern = /^[a-zA-Z0-9_-]+$/;
+  const namePattern = /^[a-z][a-z0-9-]*[a-z0-9]$/;
   if (!namePattern.test(componentName)) {
     return {
       isValid: false,
       error:
-        "Component name can only contain letters, numbers, hyphens, and underscores",
+        "Component name must start with a letter, contain only lowercase letters, numbers, and hyphens, and end with a letter or number",
     };
   }
 
-  if (componentName.length < 1 || componentName.length > 50) {
+  const reservedNames = [
+    "node_modules",
+    "package",
+    "package.json",
+    "components",
+    "lib",
+    "src",
+    "dist",
+    "build",
+    "test",
+    "tests",
+    "docs",
+    "examples",
+    "config",
+    "index",
+    "main",
+    "app",
+    "utils",
+    "types",
+    "interfaces",
+    "constants",
+  ];
+
+  if (reservedNames.includes(componentName.toLowerCase())) {
     return {
       isValid: false,
-      error: "Component name must be between 1 and 50 characters",
+      error: `Component name '${componentName}' is reserved and cannot be used`,
+    };
+  }
+
+  if (componentName.length < 2 || componentName.length > 50) {
+    return {
+      isValid: false,
+      error: "Component name must be between 2 and 50 characters",
+    };
+  }
+
+  if (componentName.includes("--")) {
+    return {
+      isValid: false,
+      error: "Component name cannot contain consecutive hyphens",
     };
   }
 
@@ -447,7 +502,74 @@ export const DEFAULT_RETRY_CONFIG: RetryConfig = {
 };
 
 /**
- * Performs a network operation with exponential backoff retry logic
+ * Rate limiting for network requests
+ */
+class RateLimiter {
+  private requests: Map<string, number[]> = new Map();
+  private maxRequests: number;
+  private windowMs: number;
+
+  constructor(maxRequests: number = 10, windowMs: number = 60000) {
+    this.maxRequests = maxRequests;
+    this.windowMs = windowMs;
+  }
+
+  canMakeRequest(key: string): boolean {
+    const now = Date.now();
+    const windowStart = now - this.windowMs;
+
+    if (!this.requests.has(key)) {
+      this.requests.set(key, [now]);
+      return true;
+    }
+
+    const requests = this.requests.get(key)!;
+    const recentRequests = requests.filter((time) => time > windowStart);
+
+    if (recentRequests.length >= this.maxRequests) {
+      return false;
+    }
+
+    recentRequests.push(now);
+    this.requests.set(key, recentRequests);
+    return true;
+  }
+
+  waitForNextWindow(key: string): Promise<void> {
+    return new Promise((resolve) => {
+      const checkInterval = setInterval(() => {
+        if (this.canMakeRequest(key)) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 1000);
+    });
+  }
+}
+
+const rateLimiter = new RateLimiter(10, 60000);
+
+/**
+ * Creates a secure axios instance with security headers
+ */
+export function createSecureAxiosInstance() {
+  const axios = require("axios");
+  return axios.create({
+    timeout: 30000,
+    maxContentLength: MAX_FILE_SIZE, // 100MB max
+    headers: {
+      "User-Agent": "SCM-CLI/1.0",
+      Accept: "application/json, text/plain, */*",
+      "Accept-Encoding": "gzip, deflate",
+    },
+    validateStatus: (status: number) => {
+      return status >= 200 && status < 300;
+    },
+  });
+}
+
+/**
+ * Performs a network operation with exponential backoff retry logic and rate limiting
  */
 export async function withRetry<T>(
   operation: () => Promise<T>,
@@ -457,26 +579,46 @@ export async function withRetry<T>(
   const finalConfig = { ...DEFAULT_RETRY_CONFIG, ...config };
   let lastError: Error;
 
+  const requestKey = operationName;
+  if (!rateLimiter.canMakeRequest(requestKey)) {
+    console.log(
+      chalk.yellow(`⏳ Rate limit reached for ${operationName}, waiting...`),
+    );
+    await rateLimiter.waitForNextWindow(requestKey);
+  }
+
   for (let attempt = 0; attempt <= finalConfig.maxRetries; attempt++) {
     try {
       return await operation();
     } catch (error) {
       lastError = error as Error;
-      
+
+      if (error instanceof Error) {
+        if (error.message.includes("401") || error.message.includes("403")) {
+          throw error;
+        }
+        if (error.message.includes("404")) {
+          throw error;
+        }
+      }
+
       if (attempt === finalConfig.maxRetries) {
         break;
       }
 
       const delay = Math.min(
-        finalConfig.baseDelay * Math.pow(finalConfig.backoffMultiplier, attempt),
+        finalConfig.baseDelay *
+          Math.pow(finalConfig.backoffMultiplier, attempt),
         finalConfig.maxDelay,
       );
 
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
-  throw new Error(`${operationName} failed after ${finalConfig.maxRetries + 1} attempts: ${lastError!.message}`);
+  throw new Error(
+    `${operationName} failed after ${finalConfig.maxRetries + 1} attempts: ${lastError!.message}`,
+  );
 }
 
 /**
@@ -484,11 +626,62 @@ export async function withRetry<T>(
  */
 export function validateFileContent(content: any, filePath: string): string {
   if (typeof content !== "string" || content.length === 0) {
-    throw new Error(`Invalid file content for ${filePath}: empty or non-string content`);
+    throw new Error(
+      `Invalid file content for ${filePath}: empty or non-string content`,
+    );
   }
 
-  if (content.includes("<script") || content.includes("javascript:")) {
-    throw new Error(`Potentially unsafe content detected in ${filePath}`);
+  const dangerousPatterns = [
+    /<script\b[^>]*>/i,
+    /javascript:/i,
+    /vbscript:/i,
+    /data:text\/html/i,
+    /data:application\/javascript/i,
+    /eval\s*\(/i,
+    /setTimeout\s*\(/i,
+    /setInterval\s*\(/i,
+    /document\.write/i,
+    /innerHTML\s*=/i,
+    /outerHTML\s*=/i,
+    /document\.createElement/i,
+    /window\.open/i,
+    /location\.href\s*=/i,
+    /XMLHttpRequest/i,
+    /process\.env/i,
+    /__dirname/i,
+    /__filename/i,
+    /fs\./i,
+    /child_process/i,
+    /exec\s*\(/i,
+    /spawn\s*\(/i,
+  ];
+
+  for (const pattern of dangerousPatterns) {
+    if (pattern.test(content)) {
+      throw new Error(
+        `Potentially unsafe content detected in ${filePath}: ${pattern.source}`,
+      );
+    }
+  }
+
+  const suspiciousExtensions = [
+    ".exe",
+    ".bat",
+    ".cmd",
+    ".ps1",
+    ".sh",
+    ".py",
+    ".php",
+    ".rb",
+  ];
+  for (const ext of suspiciousExtensions) {
+    if (content.toLowerCase().includes(ext)) {
+      console.warn(
+        chalk.yellow(
+          `⚠️  Warning: Suspicious file extension '${ext}' found in ${filePath}`,
+        ),
+      );
+    }
   }
 
   return content;
