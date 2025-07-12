@@ -52,35 +52,6 @@ export async function validateComponent(
           "Component name must start with a letter, contain only lowercase letters, numbers, and hyphens, and end with a letter or number",
         );
       }
-
-      const reservedNames = [
-        "node_modules",
-        "package",
-        "package.json",
-        "components",
-        "lib",
-        "src",
-        "dist",
-        "build",
-        "test",
-        "tests",
-        "docs",
-        "examples",
-        "config",
-        "index",
-        "main",
-        "app",
-        "utils",
-        "types",
-        "interfaces",
-        "constants",
-      ];
-
-      if (reservedNames.includes(itemToValidate.name.toLowerCase())) {
-        errors.push(
-          `Component name '${itemToValidate.name}' is reserved and cannot be used`,
-        );
-      }
     }
 
     if (itemToValidate.files && itemToValidate.files.length > 0) {

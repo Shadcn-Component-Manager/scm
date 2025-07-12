@@ -28,19 +28,6 @@ export const registryItemFileSchema = z
       .string()
       .min(1, "File path cannot be empty")
       .max(500, "File path too long")
-      .refine((path) => {
-        const dangerousPatterns = [
-          /\.\./,
-          /\\/,
-          /^\/+/,
-          /~+/,
-          /\$\{/,
-          /<script/i,
-          /javascript:/i,
-          /data:text\/html/i,
-        ];
-        return !dangerousPatterns.some((pattern) => pattern.test(path));
-      }, "File path contains potentially dangerous content")
       .describe("The path to the file relative to the registry root"),
     content: z.string().optional().describe("The content of the file"),
     type: z
@@ -59,24 +46,6 @@ export const registryItemFileSchema = z
     target: z
       .string()
       .optional()
-      .refine((target) => {
-        if (!target) return true;
-        const dangerousPatterns = [
-          /\.\./,
-          /\\/,
-          /^\/+/,
-          /~+/,
-          /\$\{/,
-          /node_modules/,
-          /\.git/,
-          /\.env/,
-          /package\.json/,
-          /package-lock\.json/,
-          /yarn\.lock/,
-          /pnpm-lock\.yaml/,
-        ];
-        return !dangerousPatterns.some((pattern) => pattern.test(target));
-      }, "Target path contains potentially dangerous content")
       .describe("The target path of the file in the project"),
   })
   .refine(
