@@ -376,16 +376,12 @@ export function validateFileTargets(
       continue;
     }
 
-    if (file.path && !isSafeTarget(file.path, cwd)) {
-      errors.push(`Unsafe file path: ${file.path}`);
-    }
-
-    if (file.target && !isSafeTarget(file.target, cwd)) {
-      errors.push(`Unsafe file target: ${file.target}`);
-    }
-
     if (file.path && typeof file.path !== "string") {
       errors.push("File path must be a string");
+    }
+
+    if (file.target && typeof file.target !== "string") {
+      errors.push("File target must be a string");
     }
 
     if (file.type && typeof file.type !== "string") {

@@ -58,15 +58,6 @@ export async function validateComponent(
       for (const file of itemToValidate.files) {
         const filePath = path.join(componentPath, file.path);
 
-        if (
-          file.path.includes("..") ||
-          file.path.includes("\\") ||
-          file.path.startsWith("/")
-        ) {
-          errors.push(`Unsafe file path detected: ${file.path}`);
-          continue;
-        }
-
         if (!(await fs.pathExists(filePath))) {
           errors.push(`File not found: ${file.path}`);
         } else {

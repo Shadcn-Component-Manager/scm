@@ -6,19 +6,19 @@ import ora from "ora";
 import path from "path";
 import { getCachedComponent, setCachedComponent } from "../lib/cache.js";
 import {
-  getComponentFileUrl,
-  getComponentRegistryUrl,
-  resolveComponentVersion,
+    getComponentFileUrl,
+    getComponentRegistryUrl,
+    resolveComponentVersion,
 } from "../lib/registry.js";
 import {
-  handleFileConflict,
-  mergeCssVariables,
-  parseComponentName,
-  resolveDependencies,
-  validateFileContent,
-  validateFileTargets,
-  validateVersion,
-  withRetry,
+    handleFileConflict,
+    mergeCssVariables,
+    parseComponentName,
+    resolveDependencies,
+    validateFileContent,
+    validateFileTargets,
+    validateVersion,
+    withRetry,
 } from "../lib/utils.js";
 
 /**
@@ -260,13 +260,6 @@ export const add = new Command()
           const validatedContent = validateFileContent(fileContent, file.path);
 
           const safePath = file.path.replace(/^components\//, "");
-          if (
-            safePath.includes("..") ||
-            safePath.includes("\\") ||
-            safePath.startsWith("/")
-          ) {
-            throw new Error(`Unsafe file path detected: ${file.path}`);
-          }
           const localPath = path.join(baseComponentsPath, safePath);
           const installPath = path.join(CWD, localPath);
 
