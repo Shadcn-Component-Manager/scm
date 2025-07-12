@@ -313,6 +313,34 @@ export async function createOrUpdateFile(
 
   const fileContent = Buffer.from(content).toString("base64");
 
+  // If no SHA is provided, try to get the current file's SHA
+  let currentSha = sha;
+  if (!currentSha) {
+    try {
+      const { data: existingFile } = await kit.rest.repos.getContent({
+        owner,
+        repo,
+        path,
+        ref: branch,
+      });
+
+      if (Array.isArray(existingFile)) {
+        // It's a directory, so we can create the file without SHA
+        currentSha = undefined;
+      } else {
+        // It's a file, get its SHA
+        currentSha = existingFile.sha;
+      }
+    } catch (error: any) {
+      if (error.status === 404) {
+        // File doesn't exist, we can create it without SHA
+        currentSha = undefined;
+      } else {
+        throw error;
+      }
+    }
+  }
+
   const { data: file } = await kit.rest.repos.createOrUpdateFileContents({
     owner,
     repo,
@@ -320,7 +348,7 @@ export async function createOrUpdateFile(
     message,
     content: fileContent,
     branch,
-    sha,
+    sha: currentSha,
   });
 
   return file;

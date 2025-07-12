@@ -64,7 +64,7 @@ export const publish = new Command()
 
       if (registryJson.items && Array.isArray(registryJson.items)) {
         const registryValidation = registrySchema.safeParse(registryJson);
-        
+
         if (!registryValidation.success) {
           spinner.fail(chalk.red("❌ Invalid registry collection"));
           console.error(chalk.red("Validation errors:"));

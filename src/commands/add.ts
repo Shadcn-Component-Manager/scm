@@ -6,19 +6,19 @@ import ora from "ora";
 import path from "path";
 import { getCachedComponent, setCachedComponent } from "../lib/cache.js";
 import {
-    getComponentFileUrl,
-    getComponentRegistryUrl,
-    resolveComponentVersion,
+  getComponentFileUrl,
+  getComponentRegistryUrl,
+  resolveComponentVersion,
 } from "../lib/registry.js";
 import {
-    handleFileConflict,
-    mergeCssVariables,
-    parseComponentName,
-    resolveDependencies,
-    validateFileContent,
-    validateFileTargets,
-    validateVersion,
-    withRetry,
+  handleFileConflict,
+  mergeCssVariables,
+  parseComponentName,
+  resolveDependencies,
+  validateFileContent,
+  validateFileTargets,
+  validateVersion,
+  withRetry,
 } from "../lib/utils.js";
 
 /**
