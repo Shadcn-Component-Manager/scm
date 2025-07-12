@@ -19,7 +19,7 @@ export function isSafeTarget(target: string, cwd: string): boolean {
     normalizedTarget.includes("..") ||
     normalizedTarget.includes("\\") ||
     normalizedTarget.startsWith("/") ||
-    normalizedTarget.includes("~") ||
+    (normalizedTarget.includes("~") && !normalizedTarget.startsWith("~/")) ||
     normalizedTarget.includes("$")
   ) {
     return false;
